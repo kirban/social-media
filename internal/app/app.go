@@ -3,20 +3,23 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/kirban/social-media/internal/api"
 	"github.com/kirban/social-media/internal/config"
 	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
 )
 
 type AppServer struct {
-	config *config.Config
-	logger *applogger.AppLogger
-	db     *db.DB
-	// http server
+	config     *config.Config
+	logger     *applogger.AppLogger
+	db         *db.DB
+	httpServer *http.Server
 }
 
 func NewAppServer() (*AppServer, error) {
@@ -41,7 +44,10 @@ func (s *AppServer) Run() {
 	defer stop()
 
 	go func() {
-		// todo: start http server
+		s.logger.Info().Msgf("HTTP server listening on %s", s.httpServer.Addr)
+		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			s.logger.Error().Err(err).Msg("HTTP server error")
+		}
 	}()
 
 	s.logger.Info().Msg("Server started. Press CTRL+C to stop")
@@ -54,6 +60,7 @@ func (s *AppServer) initDeps() error {
 		s.initConfig,
 		s.initLogger,
 		s.initDb,
+		s.initHTTPServer,
 	}
 
 	for _, dep := range deps {
@@ -84,6 +91,18 @@ func (s *AppServer) initLogger() error {
 	}
 
 	s.logger = l
+	return nil
+}
+
+func (s *AppServer) initHTTPServer() error {
+	r := chi.NewRouter()
+	api.HandlerFromMux(&api.Handlers{}, r)
+
+	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
+	s.httpServer = &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
 	return nil
 }
 
