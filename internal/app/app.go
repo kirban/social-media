@@ -2,18 +2,20 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/kirban/social-media/internal/config"
+	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
 )
 
 type AppServer struct {
 	config *config.Config
 	logger *applogger.AppLogger
-	// db
+	db     *db.DB
 	// http server
 }
 
@@ -33,6 +35,7 @@ func (s *AppServer) Run() {
 			s.logger.Panic().Msgf("uncaught panic: %v", r)
 		}
 	}()
+	defer s.db.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -50,6 +53,7 @@ func (s *AppServer) initDeps() error {
 	deps := []func() error{
 		s.initConfig,
 		s.initLogger,
+		s.initDb,
 	}
 
 	for _, dep := range deps {
@@ -80,5 +84,15 @@ func (s *AppServer) initLogger() error {
 	}
 
 	s.logger = l
+	return nil
+}
+
+func (s *AppServer) initDb() error {
+	database, err := db.New(s.config.Database)
+	if err != nil {
+		return fmt.Errorf("init db: %w", err)
+	}
+
+	s.db = database
 	return nil
 }
