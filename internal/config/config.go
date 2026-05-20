@@ -14,6 +14,7 @@ type Config struct {
 	Env      string       `yaml:"env" env:"ENV" env-required:"true"`
 	Database DBConfig     `yaml:"app_db"`
 	Server   ServerConfig `yaml:"app_server"`
+	LogLevel string       `yaml:"log_level" env:"LOG_LEVEL" env-default:"debug"`
 }
 
 type DBConfig struct {

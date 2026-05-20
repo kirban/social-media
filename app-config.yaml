@@ -1,4 +1,5 @@
 env: local
+log_level: debug
 app_db:
   host: localhost
   port: 5432

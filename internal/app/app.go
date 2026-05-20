@@ -2,18 +2,17 @@ package app
 
 import (
 	"context"
-	"log"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/kirban/social-media/internal/config"
+	applogger "github.com/kirban/social-media/internal/logger"
 )
 
 type AppServer struct {
 	config *config.Config
-	// logger
+	logger *applogger.AppLogger
 	// db
 	// http server
 }
@@ -31,7 +30,7 @@ func NewAppServer() (*AppServer, error) {
 func (s *AppServer) Run() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Panicf("uncaught panic %v", r)
+			s.logger.Panic().Msgf("uncaught panic: %v", r)
 		}
 	}()
 
@@ -42,14 +41,15 @@ func (s *AppServer) Run() {
 		// todo: start http server
 	}()
 
-	slog.Info("Server started. Press CTRL+C to stop")
+	s.logger.Info().Msg("Server started. Press CTRL+C to stop")
 	<-ctx.Done()
-	slog.Info("Got exit signal. Gracefully shutdown.")
+	s.logger.Info().Msg("Got exit signal. Gracefully shutting down.")
 }
 
 func (s *AppServer) initDeps() error {
 	deps := []func() error{
 		s.initConfig,
+		s.initLogger,
 	}
 
 	for _, dep := range deps {
@@ -70,5 +70,15 @@ func (s *AppServer) initConfig() error {
 	}
 
 	s.config = cfg
+	return nil
+}
+
+func (s *AppServer) initLogger() error {
+	l, err := applogger.NewAppLogger(s.config)
+	if err != nil {
+		return err
+	}
+
+	s.logger = l
 	return nil
 }
