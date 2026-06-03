@@ -14,6 +14,7 @@ type Config struct {
 	Env      string       `yaml:"env" env:"ENV" env-required:"true"`
 	Database DBConfig     `yaml:"app_db"`
 	Server   ServerConfig `yaml:"app_server"`
+	Auth     AuthConfig   `yaml:"-"`
 	LogLevel string       `yaml:"log_level" env:"LOG_LEVEL" env-default:"debug"`
 }
 
@@ -29,6 +30,10 @@ type DBConfig struct {
 type ServerConfig struct {
 	Host string `yaml:"host" env:"APP_HOST" env-default:"0.0.0.0"`
 	Port string `yaml:"port" env:"APP_PORT" env-required:"true" env-default:"8080"`
+}
+
+type AuthConfig struct {
+	JWTSecret string `yaml:"-" env:"JWT_SECRET" env-required:"true"`
 }
 
 func Load(path string) (*Config, error) {
