@@ -204,7 +204,7 @@ type ServerInterface interface {
 	PutPostUpdate(w http.ResponseWriter, r *http.Request)
 
 	// (GET /user/get/{id})
-	GetUserGetId(w http.ResponseWriter, r *http.Request, id UserId)
+	GetUserById(w http.ResponseWriter, r *http.Request, id UserId)
 
 	// (POST /user/register)
 	PostUserRegister(w http.ResponseWriter, r *http.Request)
@@ -268,7 +268,7 @@ func (_ Unimplemented) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // (GET /user/get/{id})
-func (_ Unimplemented) GetUserGetId(w http.ResponseWriter, r *http.Request, id UserId) {
+func (_ Unimplemented) GetUserById(w http.ResponseWriter, r *http.Request, id UserId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -583,8 +583,8 @@ func (siw *ServerInterfaceWrapper) PutPostUpdate(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
-// GetUserGetId operation middleware
-func (siw *ServerInterfaceWrapper) GetUserGetId(w http.ResponseWriter, r *http.Request) {
+// GetUserById operation middleware
+func (siw *ServerInterfaceWrapper) GetUserById(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -599,7 +599,7 @@ func (siw *ServerInterfaceWrapper) GetUserGetId(w http.ResponseWriter, r *http.R
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetUserGetId(w, r, id)
+		siw.Handler.GetUserById(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -813,7 +813,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/post/update", wrapper.PutPostUpdate)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/user/get/{id}", wrapper.GetUserGetId)
+		r.Get(options.BaseURL+"/user/get/{id}", wrapper.GetUserById)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/user/register", wrapper.PostUserRegister)

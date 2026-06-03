@@ -2,14 +2,35 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/kirban/social-media/internal/model"
+	"github.com/kirban/social-media/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (h *Handlers) GetUserGetId(w http.ResponseWriter, r *http.Request, id UserId) {
+func (h *Handlers) GetUserById(w http.ResponseWriter, r *http.Request, id UserId) {
+	if _, err := uuid.Parse(id); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
+	user, err := h.UserRepo.FindByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		h.Logger.Error().Err(err).Msg("GetUserById: find user")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(user)
 }
 
 func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +48,7 @@ func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(*body.Password), bcrypt.DefaultCost)
 	if err != nil {
 		h.Logger.Error().Err(err).Msg("PostUserRegister: hash password")
-		w.WriteHeader(http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -49,7 +70,7 @@ func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
 	id, err := h.UserRepo.Create(r.Context(), u)
 	if err != nil {
 		h.Logger.Error().Err(err).Msg("PostUserRegister: create user")
-		w.WriteHeader(http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
