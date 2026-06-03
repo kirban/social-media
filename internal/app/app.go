@@ -98,12 +98,19 @@ func (s *AppServer) initLogger() error {
 func (s *AppServer) initHTTPServer() error {
 	r := chi.NewRouter()
 
-	r.Use(appmiddleware.Logging(s.logger))
+	so := api.ChiServerOptions{
+		BaseRouter: r,
+		BaseURL:    "/api/v1",
+		Middlewares: []api.MiddlewareFunc{
+			appmiddleware.Logging(s.logger),
+			appmiddleware.Auth(s.config.Auth.JWTSecret),
+		},
+	}
 
-	api.HandlerFromMuxWithBaseURL(&api.Handlers{
+	api.HandlerWithOptions(&api.Handlers{
 		Db:     s.db,
 		Logger: s.logger,
-	}, r, "/api/v1")
+	}, so)
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
