@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	applogger "github.com/kirban/social-media/internal/logger"
 )
 
@@ -26,6 +27,7 @@ func Logging(logger *applogger.AppLogger) func(http.Handler) http.Handler {
 			next.ServeHTTP(rec, r)
 
 			logger.Info().
+				Str("request_id", chimiddleware.GetReqID(r.Context())).
 				Str("method", r.Method).
 				Str("path", r.URL.Path).
 				Int("status", rec.status).
