@@ -13,6 +13,7 @@ import (
 	"github.com/kirban/social-media/internal/config"
 	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
+	appmiddleware "github.com/kirban/social-media/internal/middleware"
 )
 
 type AppServer struct {
@@ -96,6 +97,9 @@ func (s *AppServer) initLogger() error {
 
 func (s *AppServer) initHTTPServer() error {
 	r := chi.NewRouter()
+
+	r.Use(appmiddleware.Logging(s.logger))
+
 	api.HandlerFromMux(&api.Handlers{}, r)
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
