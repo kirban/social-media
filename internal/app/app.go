@@ -62,6 +62,7 @@ func (s *AppServer) initDeps() error {
 		s.initConfig,
 		s.initLogger,
 		s.initDb,
+		s.initMigrations,
 		s.initHTTPServer,
 	}
 
@@ -131,4 +132,8 @@ func (s *AppServer) initDb() error {
 
 	s.db = database
 	return nil
+}
+
+func (s *AppServer) initMigrations() error {
+	return s.db.Migrate()
 }
