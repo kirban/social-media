@@ -1,0 +1,120 @@
+{
+  "meta": {
+    "format": "httpie",
+    "version": "1.0.0",
+    "contentType": "collection",
+    "schema": "https://schema.httpie.io/1.0.0.json",
+    "docs": "https://httpie.io/r/help/export-from-httpie",
+    "source": "HTTPie Desktop 2025.2.0"
+  },
+  "entry": {
+    "name": "otus-social-media",
+    "icon": {
+      "name": "diamond",
+      "color": "aqua"
+    },
+    "auth": {
+      "type": "bearer",
+      "credentials": {
+        "username": "",
+        "password": ""
+      },
+      "target": "headers"
+    },
+    "requests": [
+      {
+        "name": "",
+        "url": "localhost:8282/api/v1/user/register",
+        "method": "POST",
+        "headers": [],
+        "queryParams": [],
+        "pathParams": [],
+        "auth": {
+          "type": "inherited"
+        },
+        "body": {
+          "type": "text",
+          "file": {
+            "name": ""
+          },
+          "text": {
+            "value": "{\n  \"first_name\": \"Kirill\",\n  \"second_name\": \"Romanov\",\n  \"password\": \"qwerty\",\n  \"city\": \"Florida\",\n  \"birthdate\": \"1995-12-06\",\n  \"biography\": \"it was a long story to tell ...\"\n}",
+            "format": "application/json"
+          },
+          "form": {
+            "isMultipart": false,
+            "fields": []
+          },
+          "graphql": {
+            "query": "",
+            "variables": ""
+          }
+        }
+      },
+      {
+        "name": "",
+        "url": "localhost:8282/api/v1/login",
+        "method": "POST",
+        "headers": [],
+        "queryParams": [],
+        "pathParams": [],
+        "auth": {
+          "type": "inherited"
+        },
+        "body": {
+          "type": "text",
+          "file": {
+            "name": ""
+          },
+          "text": {
+            "value": "{\n  \"id\": \"4cc5eecf-dd9b-48a4-b70c-b0a44c4e3fb9\",\n  \"password\": \"qwerty\"\n}",
+            "format": "application/json"
+          },
+          "form": {
+            "isMultipart": false,
+            "fields": []
+          },
+          "graphql": {
+            "query": "",
+            "variables": ""
+          }
+        }
+      },
+      {
+        "name": "",
+        "url": "localhost:8282/api/v1/user/get/:id",
+        "method": "GET",
+        "headers": [],
+        "queryParams": [],
+        "pathParams": [
+          {
+            "name": "id",
+            "value": "4cc5eecf-dd9b-48a4-b70c-b0a44c4e3fb9",
+            "enabled": true
+          }
+        ],
+        "auth": {
+          "type": "inherited"
+        },
+        "body": {
+          "type": "none",
+          "file": {
+            "name": ""
+          },
+          "text": {
+            "value": "",
+            "format": "application/json"
+          },
+          "form": {
+            "isMultipart": false,
+            "fields": []
+          },
+          "graphql": {
+            "query": "",
+            "variables": ""
+          }
+        }
+      }
+    ]
+  }
+}
