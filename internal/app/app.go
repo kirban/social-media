@@ -101,8 +101,8 @@ func (s *AppServer) initLogger() error {
 func (s *AppServer) initHTTPServer() error {
 	r := chi.NewRouter()
 
-	r.Use(appmiddleware.Logging(s.logger))
 	r.Use(chimiddleware.RequestID)
+	r.Use(appmiddleware.Logging(s.logger))
 	r.Use(chimiddleware.Recoverer)
 
 	so := api.ChiServerOptions{
@@ -113,17 +113,15 @@ func (s *AppServer) initHTTPServer() error {
 		},
 	}
 
-	api.HandlerWithOptions(&api.Handlers{
-		Db:        s.db,
-		Logger:    s.logger,
-		JWTSecret: s.config.Auth.JWTSecret,
-		UserRepo:  repository.NewUserRepository(s.db),
-	}, so)
-
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
-		Addr:    addr,
-		Handler: r,
+		Addr: addr,
+		Handler: api.HandlerWithOptions(&api.Handlers{
+			Db:        s.db,
+			Logger:    s.logger,
+			JWTSecret: s.config.Auth.JWTSecret,
+			UserRepo:  repository.NewUserRepository(s.db),
+		}, so),
 	}
 	return nil
 }
