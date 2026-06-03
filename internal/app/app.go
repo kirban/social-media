@@ -100,7 +100,10 @@ func (s *AppServer) initHTTPServer() error {
 
 	r.Use(appmiddleware.Logging(s.logger))
 
-	api.HandlerFromMux(&api.Handlers{}, r)
+	api.HandlerFromMuxWithBaseURL(&api.Handlers{
+		Db:     s.db,
+		Logger: s.logger,
+	}, r, "/api/v1")
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
