@@ -6,23 +6,18 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kirban/social-media/internal/api"
+	"github.com/kirban/social-media/internal/model"
 )
 
 type contextKey string
 
 const UserIDKey contextKey = "userID"
 
-type UserClaims struct {
-	UserID string `json:"user_id"`
-	jwt.RegisteredClaims
-}
-
-func Auth(secret string) func(http.Handler) http.Handler {
+func Auth(secret string, securedRouteKey any) func(http.Handler) http.Handler {
 	key := []byte(secret)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Context().Value(api.BearerAuthScopes) == nil {
+			if r.Context().Value(securedRouteKey) == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -34,7 +29,7 @@ func Auth(secret string) func(http.Handler) http.Handler {
 			}
 
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-			var claims UserClaims
+			var claims model.UserClaims
 			token, err := jwt.ParseWithClaims(tokenStr, &claims, func(t *jwt.Token) (interface{}, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, jwt.ErrSignatureInvalid

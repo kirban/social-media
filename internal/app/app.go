@@ -14,6 +14,7 @@ import (
 	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
 	appmiddleware "github.com/kirban/social-media/internal/middleware"
+	"github.com/kirban/social-media/internal/repository"
 )
 
 type AppServer struct {
@@ -103,13 +104,15 @@ func (s *AppServer) initHTTPServer() error {
 		BaseURL:    "/api/v1",
 		Middlewares: []api.MiddlewareFunc{
 			appmiddleware.Logging(s.logger),
-			appmiddleware.Auth(s.config.Auth.JWTSecret),
+			appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes),
 		},
 	}
 
 	api.HandlerWithOptions(&api.Handlers{
-		Db:     s.db,
-		Logger: s.logger,
+		Db:        s.db,
+		Logger:    s.logger,
+		JWTSecret: s.config.Auth.JWTSecret,
+		UserRepo:  repository.NewUserRepository(s.db),
 	}, so)
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
