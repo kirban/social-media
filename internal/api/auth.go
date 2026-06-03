@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/repository"
 	"golang.org/x/crypto/bcrypt"
@@ -20,6 +21,11 @@ func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Id == nil || body.Password == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if _, err := uuid.Parse(*body.Id); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
