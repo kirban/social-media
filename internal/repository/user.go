@@ -19,6 +19,17 @@ func NewUserRepository(db *db.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
+func (r *UserRepository) Create(ctx context.Context, u model.User) (string, error) {
+	var id string
+	err := r.db.QueryRowContext(ctx,
+		`INSERT INTO users (first_name, second_name, birthdate, biography, city, password_hash)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id`,
+		u.FirstName, u.SecondName, u.Birthdate, u.Biography, u.City, u.PasswordHash,
+	).Scan(&id)
+	return id, err
+}
+
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, first_name, second_name, birthdate, biography, city, password_hash
