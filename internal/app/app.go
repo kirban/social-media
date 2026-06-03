@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/kirban/social-media/internal/api"
 	"github.com/kirban/social-media/internal/config"
 	"github.com/kirban/social-media/internal/db"
@@ -100,11 +101,14 @@ func (s *AppServer) initLogger() error {
 func (s *AppServer) initHTTPServer() error {
 	r := chi.NewRouter()
 
+	r.Use(appmiddleware.Logging(s.logger))
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.Recoverer)
+
 	so := api.ChiServerOptions{
 		BaseRouter: r,
 		BaseURL:    "/api/v1",
 		Middlewares: []api.MiddlewareFunc{
-			appmiddleware.Logging(s.logger),
 			appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes),
 		},
 	}
