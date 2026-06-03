@@ -37,7 +37,7 @@ func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.Logger.Error().Err(err).Msg("PostLogin: find user")
-		w.WriteHeader(http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(h.JWTSecret))
 	if err != nil {
 		h.Logger.Error().Err(err).Msg("PostLogin: sign token")
-		w.WriteHeader(http.StatusInternalServerError)
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
