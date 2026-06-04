@@ -79,6 +79,15 @@ func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetUserSearch(w http.ResponseWriter, r *http.Request, params GetUserSearchParams) {
+	users, err := h.UserRepo.FindByNames(r.Context(), params.FirstName, params.LastName)
+	if err != nil {
+		h.Logger.Error().Err(err).Msg("GetUserSearch")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
 }
 
 func strOrEmpty(s *string) string {
