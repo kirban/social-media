@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
 )
@@ -19,12 +20,15 @@ type Config struct {
 }
 
 type DBConfig struct {
-	Host     string `yaml:"host" env:"DB_HOST" env-required:"true"`
-	Port     string `yaml:"port" env:"DB_PORT" env-required:"true"`
-	DBName   string `yaml:"database" env:"DB_NAME" env-required:"true"`
-	Username string `env:"DB_USER" env-required:"true"`
-	Password string `env:"DB_PASSWORD" env-required:"true"`
-	SSLMode  string `yaml:"ssl_mode" env:"DB_SSL_MODE" env-required:"true"`
+	Host            string        `yaml:"host" env:"DB_HOST" env-required:"true"`
+	Port            string        `yaml:"port" env:"DB_PORT" env-required:"true"`
+	DBName          string        `yaml:"database" env:"DB_NAME" env-required:"true"`
+	Username        string        `env:"DB_USER" env-required:"true"`
+	Password        string        `env:"DB_PASSWORD" env-required:"true"`
+	SSLMode         string        `yaml:"ssl_mode" env:"DB_SSL_MODE" env-required:"true"`
+	MaxOpenConns    int           `yaml:"max_open_conns" env-default:"25"`
+	MaxIdleConns    int           `yaml:"max_idle_conns" env-default:"25"`
+	MaxConnLifetime time.Duration `yaml:"max_conn_lifetime" env-default:"5m"`
 }
 
 type ServerConfig struct {

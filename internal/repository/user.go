@@ -48,7 +48,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, 
 func (r *UserRepository) FindByNames(ctx context.Context, fname, lname string) (*[]model.User, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, first_name, second_name, birthdate, COALESCE(biography, ''), city
-		 FROM users WHERE first_name ILIKE $1 AND second_name ILIKE $2 ORDER BY id`,
+		 FROM users WHERE first_name ILIKE $1 AND second_name ILIKE $2 ORDER BY id ASC`,
 		fname, lname,
 	)
 	if err != nil {
