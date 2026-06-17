@@ -1,0 +1,10 @@
+env: local
+log_level: debug
+app_db:
+  host: localhost
+  port: 5432
+  database: social_media_db
+  ssl_mode: disable
+app_server:
+  host: localhost
+  port: 8080

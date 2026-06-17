@@ -9,7 +9,7 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-const DefaultConfigPath = "app-config.yaml"
+const DefaultConfigPath = "configs/app-config.yaml"
 
 type Config struct {
 	Env      string       `yaml:"env" env:"ENV" env-required:"true"`

@@ -25,15 +25,20 @@ JWT_SECRET=your-secret-key-min-32-chars
 
 Остальные параметры настраиваются в `app-config.yaml`:
 
-| Параметр           | YAML-ключ              | Переменная окружения | Значение по умолчанию |
-|--------------------|------------------------|----------------------|-----------------------|
-| Окружение          | `env`                  | `ENV`                | —                     |
-| Уровень логов      | `log_level`            | `LOG_LEVEL`          | `debug`               |
-| Хост сервера       | `app_server.host`      | `APP_HOST`           | `0.0.0.0`             |
-| Порт сервера       | `app_server.port`      | `APP_PORT`           | `8080`                |
-| Хост БД            | `app_db.host`          | `DB_HOST`            | —                     |
-| Порт БД            | `app_db.port`          | `DB_PORT`            | —                     |
-| SSL-режим БД       | `app_db.ssl_mode`      | `DB_SSL_MODE`        | —                     |
+| Параметр             | YAML-ключ                  | Переменная окружения | Значение по умолчанию |
+|----------------------|----------------------------|----------------------|-----------------------|
+| Окружение            | `env`                      | `ENV`                | —                     |
+| Уровень логов        | `log_level`                | `LOG_LEVEL`          | `debug`               |
+| Хост сервера         | `app_server.host`          | `APP_HOST`           | `0.0.0.0`             |
+| Порт сервера         | `app_server.port`          | `APP_PORT`           | `8080`                |
+| Хост БД              | `app_db.host`              | `DB_HOST`            | —                     |
+| Порт БД              | `app_db.port`              | `DB_PORT`            | —                     |
+| SSL-режим БД         | `app_db.ssl_mode`          | `DB_SSL_MODE`        | —                     |
+| Макс открытых        |                            |                      |                       |
+| соединений           | `app_db.max_open_conns`    | -                    | `25`                  |
+| Макс idle            |                            |                      |                       |
+| соединений           | `app_db.max_idle_conns`    | -                    | `25`                  |
+| Время жизни соедин-я | `app_db.max_conn_lifetime` | -                    | `5m`                  |
 
 Значение `ENV=local` включает цветной вывод логов в консоль. Любое другое значение — JSON-формат.
 
@@ -47,7 +52,7 @@ JWT_SECRET=your-secret-key-min-32-chars
 cp .env.example .env
 # заполните .env
 
-CONFIG_PATH=app-config.yaml go run ./cmd/server
+CONFIG_PATH=configs/app-config.yaml go run ./cmd/server
 ```
 
 ### Docker Compose
@@ -58,7 +63,7 @@ CONFIG_PATH=app-config.yaml go run ./cmd/server
 cp .env.example .env
 # заполните .env
 
-docker compose up --build
+docker compose --project-directory . -f ./deployments/docker-compose.yaml up --build
 ```
 
 Сервер будет доступен на `http://localhost:8282`.
@@ -100,4 +105,13 @@ golangci-lint run
 
 # сборка бинаря
 go build -o server ./cmd/server
+```
+
+## Тестирование
+
+### Нагрузочное тестирование
+
+```bash
+# скрипт для тестирования ручки поиска (требует установленного cli инструмента hey)
+hey -c 10 -z 20s http://localhost:8282/api/v1/user/search?first_name=Александр&last_name=Абрамов
 ```
