@@ -44,3 +44,37 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, 
 	}
 	return &u, nil
 }
+
+func (r *UserRepository) FindByNames(ctx context.Context, fname, lname string) (*[]model.User, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, first_name, second_name, birthdate, COALESCE(biography, ''), city
+		 FROM users WHERE first_name ILIKE $1 AND second_name ILIKE $2 ORDER BY id ASC`,
+		fname, lname,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []model.User
+
+	for rows.Next() {
+		var u model.User
+
+		err := rows.Scan(&u.ID, &u.FirstName, &u.SecondName, &u.Birthdate, &u.Biography, &u.City)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, u)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}

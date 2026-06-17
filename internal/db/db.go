@@ -25,6 +25,10 @@ func New(cfg config.DBConfig) (*DB, error) {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(cfg.MaxConnLifetime)
+
 	return &DB{sqlDB}, nil
 }
 
