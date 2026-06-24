@@ -12,16 +12,16 @@ import (
 var ErrNotFound = errors.New("not found")
 
 type UserRepository struct {
-	db *db.DB
+	cluster *db.Cluster
 }
 
-func NewUserRepository(db *db.DB) *UserRepository {
-	return &UserRepository{db: db}
+func NewUserRepository(cluster *db.Cluster) *UserRepository {
+	return &UserRepository{cluster: cluster}
 }
 
 func (r *UserRepository) Create(ctx context.Context, u model.User) (string, error) {
 	var id string
-	err := r.db.QueryRowContext(ctx,
+	err := r.cluster.Master().QueryRowContext(ctx,
 		`INSERT INTO users (first_name, second_name, birthdate, biography, city, password_hash)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 RETURNING id`,
@@ -31,7 +31,7 @@ func (r *UserRepository) Create(ctx context.Context, u model.User) (string, erro
 }
 
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, error) {
-	row := r.db.QueryRowContext(ctx,
+	row := r.cluster.Replica().QueryRowContext(ctx,
 		`SELECT id, first_name, second_name, birthdate, COALESCE(biography, ''), city, password_hash
 		 FROM users WHERE id = $1`, id)
 
@@ -46,7 +46,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, 
 }
 
 func (r *UserRepository) FindByNames(ctx context.Context, fname, lname string) (*[]model.User, error) {
-	rows, err := r.db.QueryContext(ctx,
+	rows, err := r.cluster.Replica().QueryContext(ctx,
 		`SELECT id, first_name, second_name, birthdate, COALESCE(biography, ''), city
 		 FROM users WHERE first_name ILIKE $1 AND second_name ILIKE $2 ORDER BY id ASC`,
 		fname, lname,

@@ -21,7 +21,7 @@ import (
 type AppServer struct {
 	config     *config.Config
 	logger     *applogger.AppLogger
-	db         *db.DB
+	db         *db.Cluster
 	httpServer *http.Server
 }
 
@@ -117,7 +117,6 @@ func (s *AppServer) initHTTPServer() error {
 	s.httpServer = &http.Server{
 		Addr: addr,
 		Handler: api.HandlerWithOptions(&api.Handlers{
-			Db:        s.db,
 			Logger:    s.logger,
 			JWTSecret: s.config.Auth.JWTSecret,
 			UserRepo:  repository.NewUserRepository(s.db),
@@ -127,12 +126,12 @@ func (s *AppServer) initHTTPServer() error {
 }
 
 func (s *AppServer) initDb() error {
-	database, err := db.New(s.config.Database)
+	cluster, err := db.NewCluster(s.config.Database)
 	if err != nil {
 		return fmt.Errorf("init db: %w", err)
 	}
 
-	s.db = database
+	s.db = cluster
 	return nil
 }
 

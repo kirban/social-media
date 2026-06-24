@@ -5,6 +5,11 @@ app_db:
   port: 5432
   database: social_media_db
   ssl_mode: disable
+  # replicas:
+  #   - host: replica1
+  #     port: 5432
+  #   - host: replica2
+  #     port: 5432
 app_server:
   host: localhost
   port: 8080
