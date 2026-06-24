@@ -107,6 +107,13 @@ golangci-lint run
 go build -o server ./cmd/server
 ```
 
+### Сгенерировать миграцию
+
+```bash
+# замени <NEW_MIGRATION_NAME> на название новой миграции
+go tool goose -dir internal/db/migrations create <NEW_MIGRATION_NAME> sql
+```
+
 ## Тестирование
 
 ### Нагрузочное тестирование
