@@ -32,7 +32,7 @@ func (r *UserRepository) Create(ctx context.Context, u model.User) (string, erro
 
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT id, first_name, second_name, birthdate, biography, city, password_hash
+		`SELECT id, first_name, second_name, birthdate, COALESCE(biography, ''), city, password_hash
 		 FROM users WHERE id = $1`, id)
 
 	var u model.User
