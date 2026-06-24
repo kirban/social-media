@@ -28,6 +28,7 @@ services:
       - pgnet
     volumes:
       - sm-data-master:/var/lib/postgresql
+      - ./deployments/init-master.sh:/docker-entrypoint-initdb.d/init-master.sh
     env_file:
       - .env
     environment:
@@ -82,40 +83,25 @@ services:
       - bash
       - -c
       - |
-        TARGET_DIR="/var/lib/postgresql/18/docker"
-
-        if [ ! -s "$${TARGET_DIR}/PG_VERSION" ]; then
+        # Проверяем файлы данных через системную переменную $$PGDATA
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
           echo "=== Папка пуста. Начинаем клонирование мастера... ==="
-          
-          until pg_isready -h sm-db -p 5432 -U replicator -d "$${POSTGRES_DB}"; do
-            echo "Ожидание готовности мастера..."
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          # pg_basebackup сам возьмет PGUSER и PGPASSWORD из environment
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
             sleep 3
           done
-
-          # Бесконечный цикл клонирования, пока команда не выполнится со статусом 0 (успех)
-          while true; do
-            # Гарантируем права перед стартом утилиты
-            mkdir -p "$${TARGET_DIR}"
-            chmod 700 "$${TARGET_DIR}"
-            chown -R 999:999 /var/lib/postgresql
-
-            echo "Запуск pg_basebackup..."
-            if gosu postgres pg_basebackup -h sm-db -D "$${TARGET_DIR}" -U replicator -F p -P -R -X stream; then
-              echo "=== Клонирование завершено успешно! ==="
-              break
-            else
-              echo "!!! Ошибка pg_basebackup. Очистка прав и повтор через 5 секунд... !!!"
-              chown -R 999:999 /var/lib/postgresql
-              sleep 5
-            fi
-          done
-        else
-          echo "=== Обнаружены существующие данные. Обычный запуск реплики... ==="
+          echo "=== Клонирование завершено успешно! ==="
         fi
 
-        # Финальный сброс прав перед передачей управления Postgres
         chown -R 999:999 /var/lib/postgresql
-        exec gosu postgres docker-entrypoint.sh postgres -c primary_conninfo='host=sm-db port=5432 user=replicator password=pass application_name=sm-db-sl1'
+        exec gosu postgres docker-entrypoint.sh postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl1'
   sm-db-sl2:
     container_name: sm-db-sl2
     image: postgres:18
@@ -147,40 +133,23 @@ services:
       - bash
       - -c
       - |
-        TARGET_DIR="/var/lib/postgresql/18/docker"
-
-        if [ ! -s "$${TARGET_DIR}/PG_VERSION" ]; then
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
           echo "=== Папка пуста. Начинаем клонирование мастера... ==="
-          
-          until pg_isready -h sm-db -p 5432 -U replicator -d "$${POSTGRES_DB}"; do
-            echo "Ожидание готовности мастера..."
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
             sleep 3
           done
-
-          # Бесконечный цикл клонирования, пока команда не выполнится со статусом 0 (успех)
-          while true; do
-            # Гарантируем права перед стартом утилиты
-            mkdir -p "$${TARGET_DIR}"
-            chmod 700 "$${TARGET_DIR}"
-            chown -R 999:999 /var/lib/postgresql
-
-            echo "Запуск pg_basebackup..."
-            if gosu postgres pg_basebackup -h sm-db -D "$${TARGET_DIR}" -U replicator -F p -P -R -X stream; then
-              echo "=== Клонирование завершено успешно! ==="
-              break
-            else
-              echo "!!! Ошибка pg_basebackup. Очистка прав и повтор через 5 секунд... !!!"
-              chown -R 999:999 /var/lib/postgresql
-              sleep 5
-            fi
-          done
-        else
-          echo "=== Обнаружены существующие данные. Обычный запуск реплики... ==="
+          echo "=== Клонирование завершено успешно! ==="
         fi
 
-        # Финальный сброс прав перед передачей управления Postgres
         chown -R 999:999 /var/lib/postgresql
-        exec gosu postgres docker-entrypoint.sh postgres -c primary_conninfo='host=sm-db port=5432 user=replicator password=pass application_name=sm-db-sl2'
+        exec gosu postgres docker-entrypoint.sh postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl2'
 
 networks:
   pgnet:
