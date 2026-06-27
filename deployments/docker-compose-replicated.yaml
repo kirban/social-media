@@ -49,8 +49,8 @@ services:
       -c max_wal_senders=4
       -c max_replication_slots=4
       -c wal_keep_size=1024MB
-#      -c synchronous_commit=on
-#      -c synchronous_standby_names='FIRST 1 ("sm-db-sl1", "sm-db-sl2")'
+      -c synchronous_commit=on
+      -c synchronous_standby_names='FIRST 1 ("sm-db-sl1", "sm-db-sl2")'
 
   sm-db-sl1:
     container_name: sm-db-sl1
