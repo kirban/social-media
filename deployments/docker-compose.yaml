@@ -3,13 +3,14 @@ services:
     container_name: sm-app
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: build/package/Dockerfile
     ports:
       - "8080:8080"
     env_file:
       - .env
     depends_on:
-      - sm-db
+      sm-db:
+        condition: service_healthy
 
   sm-db:
     container_name: sm-db
@@ -24,5 +25,10 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 volumes:
   sm-data:

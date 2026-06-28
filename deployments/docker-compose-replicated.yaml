@@ -1,0 +1,161 @@
+services:
+  sm-app:
+    container_name: sm-app
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile
+    ports:
+      - "8282:8080"
+    networks:
+      - pgnet
+    env_file:
+      - .env
+    depends_on:
+      sm-db-main:
+        condition: service_healthy
+      sm-db-sl1:
+        condition: service_healthy
+      sm-db-sl2:
+        condition: service_healthy
+
+  sm-db-main:
+    container_name: sm-db
+    image: postgres:18
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - pgnet
+    volumes:
+      - sm-data-master:/var/lib/postgresql
+      - ./deployments/init-master.sh:/docker-entrypoint-initdb.d/init-master.sh
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=4
+      -c max_replication_slots=4
+      -c wal_keep_size=1024MB
+      -c synchronous_commit=on
+      -c synchronous_standby_names='FIRST 1 ("sm-db-sl1", "sm-db-sl2")'
+
+  sm-db-sl1:
+    container_name: sm-db-sl1
+    image: postgres:18
+    user: root
+    depends_on:
+      - sm-db-main
+    ports:
+      - "5434:5432"
+    restart: unless-stopped
+    networks:
+      - pgnet
+    volumes:
+      - sm-data-sl1:/var/lib/postgresql
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # Проверяем файлы данных через системную переменную $$PGDATA
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
+          echo "=== Папка пуста. Начинаем клонирование мастера... ==="
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          # pg_basebackup сам возьмет PGUSER и PGPASSWORD из environment
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
+            sleep 3
+          done
+          echo "=== Клонирование завершено успешно! ==="
+        fi
+
+        chown -R 999:999 /var/lib/postgresql
+        exec gosu postgres docker-entrypoint.sh postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl1'
+  sm-db-sl2:
+    container_name: sm-db-sl2
+    image: postgres:18
+    user: root
+    depends_on:
+      - sm-db-main
+    ports:
+      - "5435:5432"
+    restart: unless-stopped
+    networks:
+      - pgnet
+    volumes:
+      - sm-data-sl2:/var/lib/postgresql
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
+          echo "=== Папка пуста. Начинаем клонирование мастера... ==="
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
+            sleep 3
+          done
+          echo "=== Клонирование завершено успешно! ==="
+        fi
+
+        chown -R 999:999 /var/lib/postgresql
+        exec gosu postgres docker-entrypoint.sh postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl2'
+
+networks:
+  pgnet:
+    driver: bridge
+
+volumes:
+  sm-data-master:
+  sm-data-sl1:
+  sm-data-sl2:

@@ -16,7 +16,7 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /app/server .
-COPY app-config.yaml ./app-config.yaml
+COPY configs/app-config-docker.yaml ./configs/app-config.yaml
 
 EXPOSE 8080
 

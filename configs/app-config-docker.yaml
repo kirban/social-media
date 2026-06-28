@@ -1,0 +1,15 @@
+env: local
+log_level: debug
+app_db:
+  host: sm-db
+  port: 5432
+  database: social_media_db
+  ssl_mode: disable
+  replicas:
+    - host: sm-db-sl1
+      port: 5432
+    - host: sm-db-sl2
+      port: 5432
+app_server:
+  host: 0.0.0.0
+  port: 8080

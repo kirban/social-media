@@ -1,0 +1,193 @@
+# Patroni HA cluster: etcd (DCS) + 3 Patroni/PG nodes + HAProxy + app.
+#
+# Run from the project root:
+#   docker compose -f deployments/docker-compose-cluster-patroni.yaml up --build
+#
+# HAProxy exposes:
+#   localhost:5400 → primary (writes)
+#   localhost:5401 → replicas (reads)
+#   localhost:7000 → HAProxy stats dashboard
+#
+# Direct Patroni node access (for debugging / patronictl):
+#   localhost:5442, :5443, :5444 → PostgreSQL on node1/2/3
+#   localhost:8008, :8009, :8010 → Patroni REST API on node1/2/3
+
+services:
+
+  # ── etcd ──────────────────────────────────────────────────────────────────
+  sm-etcd:
+    container_name: sm-etcd
+    image: quay.io/coreos/etcd:v3.5.17
+    environment:
+      ETCD_NAME: sm-etcd
+      ETCD_DATA_DIR: /etcd-data
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://sm-etcd:2379
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://sm-etcd:2380
+      ETCD_INITIAL_CLUSTER: sm-etcd=http://sm-etcd:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_INITIAL_CLUSTER_TOKEN: sm-patroni-cluster
+      ETCDCTL_API: "3"
+      ETCD_ENABLE_V2: "true"
+    volumes:
+      - sm-patroni-etcd-data:/etcd-data
+    networks:
+      - pgnet-patroni
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/etcdctl", "--endpoints=http://localhost:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Patroni node 1 (uses existing master data from social-media_sm-data-master) ─
+  patroni-node1:
+    container_name: sm-patroni-node1
+    build:
+      context: ..
+      dockerfile: build/package/Dockerfile.patroni
+    hostname: patroni-node1
+    environment:
+      PATRONI_NAME: patroni-node1
+      PATRONI_SCOPE: sm-cluster
+      PATRONI_ETCD_HOSTS: sm-etcd:2379
+      PGDATA: /var/lib/postgresql/18/docker
+      REPLICATION_PASSWORD: pass
+    env_file:
+      - ../.env
+    volumes:
+      - social-media_sm-data-master:/var/lib/postgresql
+      - ./patroni/post-init.sh:/scripts/post-init.sh
+    networks:
+      - pgnet-patroni
+    ports:
+      - "5442:5432"
+      - "8008:8008"
+    depends_on:
+      sm-etcd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8008/health | grep -q 'running'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  # ── Patroni node 2 ────────────────────────────────────────────────────────
+  patroni-node2:
+    container_name: sm-patroni-node2
+    build:
+      context: ..
+      dockerfile: build/package/Dockerfile.patroni
+    hostname: patroni-node2
+    environment:
+      PATRONI_NAME: patroni-node2
+      PATRONI_SCOPE: sm-cluster
+      PATRONI_ETCD_HOSTS: sm-etcd:2379
+      PGDATA: /var/lib/postgresql/data
+      REPLICATION_PASSWORD: pass
+    env_file:
+      - ../.env
+    volumes:
+      - sm-patroni-node2-data:/var/lib/postgresql
+      - ./patroni/post-init.sh:/scripts/post-init.sh
+    networks:
+      - pgnet-patroni
+    ports:
+      - "5443:5432"
+      - "8009:8008"
+    depends_on:
+      sm-etcd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8008/health | grep -q 'running'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  # ── Patroni node 3 ────────────────────────────────────────────────────────
+  patroni-node3:
+    container_name: sm-patroni-node3
+    build:
+      context: ..
+      dockerfile: build/package/Dockerfile.patroni
+    hostname: patroni-node3
+    environment:
+      PATRONI_NAME: patroni-node3
+      PATRONI_SCOPE: sm-cluster
+      PATRONI_ETCD_HOSTS: sm-etcd:2379
+      PGDATA: /var/lib/postgresql/data
+      REPLICATION_PASSWORD: pass
+    env_file:
+      - ../.env
+    volumes:
+      - sm-patroni-node3-data:/var/lib/postgresql
+      - ./patroni/post-init.sh:/scripts/post-init.sh
+    networks:
+      - pgnet-patroni
+    ports:
+      - "5444:5432"
+      - "8010:8008"
+    depends_on:
+      sm-etcd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8008/health | grep -q 'running'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  # ── HAProxy ───────────────────────────────────────────────────────────────
+  sm-haproxy:
+    container_name: sm-haproxy
+    image: haproxy:2.8-alpine
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - pgnet-patroni
+    ports:
+      - "5400:5432"   # writes → primary
+      - "5401:5433"   # reads  → replicas
+      - "7001:7000"   # stats dashboard
+    depends_on:
+      patroni-node1:
+        condition: service_healthy
+      patroni-node2:
+        condition: service_healthy
+      patroni-node3:
+        condition: service_healthy
+
+  # ── Application ───────────────────────────────────────────────────────────
+  sm-app:
+    container_name: sm-app-patroni
+    build:
+      context: ..
+      dockerfile: build/package/Dockerfile
+    ports:
+      - "8282:8080"
+    networks:
+      - pgnet-patroni
+    env_file:
+      - ../.env
+    environment:
+      DB_HOST: sm-haproxy
+      DB_PORT: "5432"
+      DB_SSL_MODE: disable
+    volumes:
+      - ../configs/app-config-patroni.yaml:/app/configs/app-config.yaml:ro
+    depends_on:
+      - sm-haproxy
+    restart: unless-stopped
+
+networks:
+  pgnet-patroni:
+    driver: bridge
+
+volumes:
+  sm-patroni-etcd-data:
+  sm-patroni-node2-data:
+  sm-patroni-node3-data:
+  social-media_sm-data-master:
+    external: true
