@@ -16,6 +16,7 @@ import (
 	applogger "github.com/kirban/social-media/internal/logger"
 	appmiddleware "github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/repository"
+	"github.com/kirban/social-media/internal/service"
 )
 
 type AppServer struct {
@@ -113,13 +114,14 @@ func (s *AppServer) initHTTPServer() error {
 		},
 	}
 
+	userSvc := service.NewUserService(repository.NewUserRepository(s.db), s.config.Auth.JWTSecret)
+
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
 		Addr: addr,
 		Handler: api.HandlerWithOptions(&api.Handlers{
-			Logger:    s.logger,
-			JWTSecret: s.config.Auth.JWTSecret,
-			UserRepo:  repository.NewUserRepository(s.db),
+			Logger:  s.logger,
+			UserSvc: userSvc,
 		}, so),
 	}
 	return nil

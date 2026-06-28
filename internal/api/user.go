@@ -6,9 +6,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/kirban/social-media/internal/model"
-	"github.com/kirban/social-media/internal/repository"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/kirban/social-media/internal/service"
 )
 
 func (h *Handlers) GetUserById(w http.ResponseWriter, r *http.Request, id UserId) {
@@ -17,9 +15,9 @@ func (h *Handlers) GetUserById(w http.ResponseWriter, r *http.Request, id UserId
 		return
 	}
 
-	user, err := h.UserRepo.FindByID(r.Context(), id)
+	user, err := h.UserSvc.GetByID(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, service.ErrNotFound) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -45,31 +43,15 @@ func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(*body.Password), bcrypt.DefaultCost)
-	if err != nil {
-		h.Logger.Error().Err(err).Msg("PostUserRegister: hash password")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
 	var birthdate *string
 	if body.Birthdate != nil {
 		s := body.Birthdate.Time.Format("2006-01-02")
 		birthdate = &s
 	}
 
-	u := model.User{
-		FirstName:    *body.FirstName,
-		SecondName:   *body.SecondName,
-		Birthdate:    birthdate,
-		Biography:    strOrEmpty(body.Biography),
-		City:         strOrEmpty(body.City),
-		PasswordHash: string(hash),
-	}
-
-	id, err := h.UserRepo.Create(r.Context(), u)
+	id, err := h.UserSvc.Register(r.Context(), *body.FirstName, *body.SecondName, *body.Password, birthdate, strOrEmpty(body.Biography), strOrEmpty(body.City))
 	if err != nil {
-		h.Logger.Error().Err(err).Msg("PostUserRegister: create user")
+		h.Logger.Error().Err(err).Msg("PostUserRegister: register user")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -79,7 +61,7 @@ func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetUserSearch(w http.ResponseWriter, r *http.Request, params GetUserSearchParams) {
-	users, err := h.UserRepo.FindByNames(r.Context(), params.FirstName, params.LastName)
+	users, err := h.UserSvc.SearchByNames(r.Context(), params.FirstName, params.LastName)
 	if err != nil {
 		h.Logger.Error().Err(err).Msg("GetUserSearch")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
