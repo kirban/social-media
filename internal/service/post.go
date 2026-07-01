@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/repository"
@@ -42,7 +43,13 @@ func (s *PostsService) GetByID(ctx context.Context, id string) (*model.Post, err
 	return post, nil
 }
 
-func (s *PostsService) Update(ctx context.Context, id string) error {
+func (s *PostsService) Update(ctx context.Context, id string, post *model.Post) error {
+	if err := s.repo.Update(ctx, id, post); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
 	return nil
 }
 

@@ -51,6 +51,19 @@ func (r *PostRepository) GetByID(ctx context.Context, id string) (*model.Post, e
 }
 
 func (r *PostRepository) Update(ctx context.Context, id string, post *model.Post) error {
+	result, err := r.cluster.Master().ExecContext(ctx, `
+		UPDATE posts SET text = $1, updated_at = NOW() WHERE id = $2
+	`, post.Text, id)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 

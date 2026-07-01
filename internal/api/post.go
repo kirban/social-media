@@ -77,10 +77,36 @@ func (h *Handlers) GetPostGetId(w http.ResponseWriter, r *http.Request, id PostI
 	json.NewEncoder(w).Encode(post)
 }
 
-// // (PUT /post/update)
-// func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
+// (PUT /post/update)
+func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
+	var body PutPostUpdateJSONBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, r, http.StatusBadRequest, "failed to decode body")
+		return
+	}
 
-// }
+	if _, err := uuid.Parse(body.Id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "failed to parse id")
+		return
+	}
+
+	if body.Text == "" {
+		writeError(w, r, http.StatusBadRequest, "text is not set")
+		return
+	}
+
+	if err := h.PostSvc.Update(r.Context(), body.Id, &model.Post{Text: body.Text}); err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			writeError(w, r, http.StatusNotFound, "not found")
+			return
+		}
+		h.Logger.Error().Err(err).Msg("PutPostUpdate: update post")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
 
 // // (PUT /post/delete/{id})
 // func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id PostId) {
