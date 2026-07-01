@@ -1,11 +1,9 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/service"
@@ -18,10 +16,8 @@ func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params Ge
 
 // (POST /post/create)
 func (h *Handlers) PostPostCreate(w http.ResponseWriter, r *http.Request) {
-	var body PostPostCreateJSONBody
-
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, r, http.StatusBadRequest, "failed to decode body")
+	body, ok := decodeBody[PostPostCreateJSONBody](w, r)
+	if !ok {
 		return
 	}
 
@@ -38,26 +34,19 @@ func (h *Handlers) PostPostCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto := &model.Post{
-		Text:      body.Text,
-		CreatorID: authorUserID,
-	}
-	id, err := h.PostSvc.Create(ctx, dto)
+	id, err := h.PostSvc.Create(ctx, &model.Post{Text: body.Text, CreatorID: authorUserID})
 	if err != nil {
 		h.Logger.Error().Err(err).Msg("PostPostCreate: create post")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"post_id": id})
-
+	writeJSON(w, http.StatusOK, map[string]string{"post_id": id})
 }
 
 // (GET /post/get/{id})
 func (h *Handlers) GetPostGetId(w http.ResponseWriter, r *http.Request, id PostId) {
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, r, http.StatusBadRequest, "failed to parse id")
+	if !parseUUID(w, r, id) {
 		return
 	}
 
@@ -72,21 +61,17 @@ func (h *Handlers) GetPostGetId(w http.ResponseWriter, r *http.Request, id PostI
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(post)
+	writeJSON(w, http.StatusOK, post)
 }
 
 // (PUT /post/update)
 func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
-	var body PutPostUpdateJSONBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, r, http.StatusBadRequest, "failed to decode body")
+	body, ok := decodeBody[PutPostUpdateJSONBody](w, r)
+	if !ok {
 		return
 	}
 
-	if _, err := uuid.Parse(body.Id); err != nil {
-		writeError(w, r, http.StatusBadRequest, "failed to parse id")
+	if !parseUUID(w, r, body.Id) {
 		return
 	}
 
@@ -110,8 +95,7 @@ func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
 
 // (PUT /post/delete/{id})
 func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id PostId) {
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, r, http.StatusBadRequest, "failed to parse id")
+	if !parseUUID(w, r, id) {
 		return
 	}
 

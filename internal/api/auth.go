@@ -1,18 +1,15 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/kirban/social-media/internal/service"
 )
 
 func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
-	var body PostLoginJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	body, ok := decodeBody[PostLoginJSONRequestBody](w, r)
+	if !ok {
 		return
 	}
 
@@ -21,8 +18,7 @@ func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := uuid.Parse(*body.Id); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if !parseUUID(w, r, *body.Id) {
 		return
 	}
 
@@ -37,6 +33,5 @@ func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": token})
+	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }

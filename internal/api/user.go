@@ -1,17 +1,14 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/kirban/social-media/internal/service"
 )
 
 func (h *Handlers) GetUserById(w http.ResponseWriter, r *http.Request, id UserId) {
-	if _, err := uuid.Parse(id); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if !parseUUID(w, r, id) {
 		return
 	}
 
@@ -26,15 +23,12 @@ func (h *Handlers) GetUserById(w http.ResponseWriter, r *http.Request, id UserId
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(user)
+	writeJSON(w, http.StatusOK, user)
 }
 
 func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
-	var body PostUserRegisterJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	body, ok := decodeBody[PostUserRegisterJSONRequestBody](w, r)
+	if !ok {
 		return
 	}
 
@@ -56,8 +50,7 @@ func (h *Handlers) PostUserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"user_id": id})
+	writeJSON(w, http.StatusOK, map[string]string{"user_id": id})
 }
 
 func (h *Handlers) GetUserSearch(w http.ResponseWriter, r *http.Request, params GetUserSearchParams) {
@@ -68,13 +61,5 @@ func (h *Handlers) GetUserSearch(w http.ResponseWriter, r *http.Request, params 
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
-}
-
-func strOrEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
+	writeJSON(w, http.StatusOK, users)
 }
