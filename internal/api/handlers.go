@@ -9,9 +9,10 @@ import (
 // endpoints to the spec doesn't break the build until they are wired up.
 type Handlers struct {
 	Unimplemented
-	Logger  *logger.AppLogger
-	UserSvc *service.UserService
-	PostSvc *service.PostsService
+	Logger     *logger.AppLogger
+	UserSvc    *service.UserService
+	PostSvc    *service.PostsService
+	FriendsSvc *service.FriendsService
 }
 
 var _ ServerInterface = (*Handlers)(nil)

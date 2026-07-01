@@ -21,13 +21,15 @@ import (
 )
 
 type repositories struct {
-	user *repository.UserRepository
-	post *repository.PostRepository
+	user    *repository.UserRepository
+	post    *repository.PostRepository
+	friends *repository.FriendsRepository
 }
 
 type services struct {
-	user *service.UserService
-	post *service.PostsService
+	user    *service.UserService
+	post    *service.PostsService
+	friends *service.FriendsService
 }
 
 type AppServer struct {
@@ -116,16 +118,18 @@ func (s *AppServer) initLogger() error {
 
 func (s *AppServer) initRepositories() error {
 	s.repos = &repositories{
-		user: repository.NewUserRepository(s.db),
-		post: repository.NewPostRepository(s.db),
+		user:    repository.NewUserRepository(s.db),
+		post:    repository.NewPostRepository(s.db),
+		friends: repository.NewFriendsRepository(s.db),
 	}
 	return nil
 }
 
 func (s *AppServer) initServices() error {
 	s.svcs = &services{
-		user: service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
-		post: service.NewPostsService(s.repos.post),
+		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
+		post:    service.NewPostsService(s.repos.post),
+		friends: service.NewFriendsService(s.repos.friends),
 	}
 	return nil
 }
@@ -154,9 +158,10 @@ func (s *AppServer) initHTTPServer() error {
 	s.httpServer = &http.Server{
 		Addr: addr,
 		Handler: api.HandlerWithOptions(&api.Handlers{
-			Logger:  s.logger,
-			UserSvc: s.svcs.user,
-			PostSvc: s.svcs.post,
+			Logger:     s.logger,
+			UserSvc:    s.svcs.user,
+			PostSvc:    s.svcs.post,
+			FriendsSvc: s.svcs.friends,
 		}, so),
 	}
 	return nil
