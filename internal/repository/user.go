@@ -9,8 +9,6 @@ import (
 	"github.com/kirban/social-media/internal/model"
 )
 
-var ErrNotFound = errors.New("not found")
-
 type UserRepository struct {
 	cluster *db.Cluster
 }

@@ -11,6 +11,7 @@ type Handlers struct {
 	Unimplemented
 	Logger  *logger.AppLogger
 	UserSvc *service.UserService
+	PostSvc *service.PostsService
 }
 
 var _ ServerInterface = (*Handlers)(nil)
