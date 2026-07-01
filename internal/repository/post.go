@@ -68,5 +68,16 @@ func (r *PostRepository) Update(ctx context.Context, id string, post *model.Post
 }
 
 func (r *PostRepository) Delete(ctx context.Context, id string) error {
+	result, err := r.cluster.Master().ExecContext(ctx, `DELETE FROM posts WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
 	return nil
 }

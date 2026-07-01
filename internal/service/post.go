@@ -54,5 +54,11 @@ func (s *PostsService) Update(ctx context.Context, id string, post *model.Post) 
 }
 
 func (s *PostsService) Delete(ctx context.Context, id string) error {
+	if err := s.repo.Delete(ctx, id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
 	return nil
 }

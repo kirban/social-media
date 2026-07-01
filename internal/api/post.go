@@ -108,7 +108,22 @@ func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// // (PUT /post/delete/{id})
-// func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id PostId) {
+// (PUT /post/delete/{id})
+func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id PostId) {
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "failed to parse id")
+		return
+	}
 
-// }
+	if err := h.PostSvc.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			writeError(w, r, http.StatusNotFound, "not found")
+			return
+		}
+		h.Logger.Error().Err(err).Msg("PutPostDeleteId: delete post")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
