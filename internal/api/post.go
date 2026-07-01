@@ -11,6 +11,24 @@ import (
 
 // (GET /post/feed)
 func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params GetPostFeedParams) {
+	ctx := r.Context()
+	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	if !ok {
+		h.Logger.Error().Msg("GetPostFeed: failed to parse UserIDKey")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	feed, err := h.PostSvc.GetFeed(ctx, userID)
+	if err != nil {
+		h.Logger.Error().Msg("GetPostFeed: failed to parse get feed")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string][]model.Post{
+		"posts": feed,
+	})
 
 }
 

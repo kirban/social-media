@@ -14,7 +14,7 @@ type PostRepositoryInterface interface {
 	GetById(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
 	Delete(ctx context.Context, id string) error
-	// GetFeed() ([]struct{}, error)
+	GetFeed(ctx context.Context, userID string) ([]model.Post, error)
 }
 
 type PostRepository struct {
@@ -80,4 +80,36 @@ func (r *PostRepository) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *PostRepository) GetFeed(ctx context.Context, userID string) ([]model.Post, error) {
+	rows, err := r.cluster.Replica().QueryContext(ctx, `
+		WITH friends_ids AS (
+			SELECT friend_id FROM friends WHERE user_id = $1
+		)
+		SELECT id, text, creator_id, created_at, updated_at
+		FROM posts
+		WHERE creator_id IN friends_ids
+		ORDER BY created_at ASC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	feed := make([]model.Post, 0)
+
+	for rows.Next() {
+		var post model.Post
+		if err := rows.Scan(&post.ID, &post.Text, &post.CreatorID, &post.CreatedAt, &post.UpdatedAt); err != nil {
+			return nil, err
+		}
+		feed = append(feed, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return feed, nil
 }

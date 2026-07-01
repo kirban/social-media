@@ -9,9 +9,9 @@ import (
 )
 
 type PostsServiceInterface interface {
-	GetFeed(ctx context.Context) ([]struct{}, error)
-	Create(ctx context.Context, dto struct{}) (string, error)
-	GetById(ctx context.Context, id string) (struct{}, error)
+	GetFeed(ctx context.Context, userID string) ([]model.Post, error)
+	Create(ctx context.Context, dto *model.Post) (string, error)
+	GetById(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
@@ -26,8 +26,12 @@ func NewPostsService(repo *repository.PostRepository) *PostsService {
 	}
 }
 
-func (s *PostsService) GetFeed(ctx context.Context) ([]model.Post, error) {
-	return nil, nil
+func (s *PostsService) GetFeed(ctx context.Context, userID string) ([]model.Post, error) {
+	feed, err := s.repo.GetFeed(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return feed, nil
 }
 
 func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, error) {
