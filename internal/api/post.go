@@ -2,10 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/model"
+	"github.com/kirban/social-media/internal/service"
 )
 
 // (GET /post/feed)
@@ -51,17 +54,35 @@ func (h *Handlers) PostPostCreate(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// // (PUT /post/delete/{id})
-// func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id PostId) {
+// (GET /post/get/{id})
+func (h *Handlers) GetPostGetId(w http.ResponseWriter, r *http.Request, id PostId) {
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "failed to parse id")
+		return
+	}
 
-// }
+	post, err := h.PostSvc.GetByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			writeError(w, r, http.StatusNotFound, "not found")
+			return
+		}
+		h.Logger.Error().Err(err).Msg("GetPostGetId: find post")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
 
-// // (GET /post/get/{id})
-// func (h *Handlers) GetPostGetId(w http.ResponseWriter, r *http.Request, id PostId) {
-
-// }
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(post)
+}
 
 // // (PUT /post/update)
 // func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
+
+// }
+
+// // (PUT /post/delete/{id})
+// func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id PostId) {
 
 // }

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"github.com/kirban/social-media/internal/db"
 	"github.com/kirban/social-media/internal/model"
@@ -32,8 +34,20 @@ func (r *PostRepository) Create(ctx context.Context, p *model.Post) (string, err
 	return id, err
 }
 
-func (r *PostRepository) GetById(ctx context.Context, id string) (*model.Post, error) {
-	return &model.Post{}, nil
+func (r *PostRepository) GetByID(ctx context.Context, id string) (*model.Post, error) {
+	row := r.cluster.Replica().QueryRowContext(ctx, `
+		SELECT id, text, creator_id, created_at, updated_at FROM posts
+		WHERE id = $1
+	`, id)
+
+	var post model.Post
+	if err := row.Scan(&post.ID, &post.Text, &post.CreatorID, &post.CreatedAt, &post.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &post, nil
 }
 
 func (r *PostRepository) Update(ctx context.Context, id string, post *model.Post) error {

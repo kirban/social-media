@@ -34,8 +34,12 @@ func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, err
 	return id, err
 }
 
-func (s *PostsService) GetById(ctx context.Context, id string) (*model.Post, error) {
-	return nil, nil
+func (s *PostsService) GetByID(ctx context.Context, id string) (*model.Post, error) {
+	post, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return post, nil
 }
 
 func (s *PostsService) Update(ctx context.Context, id string) error {
