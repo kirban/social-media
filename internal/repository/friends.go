@@ -21,3 +21,10 @@ func (r *FriendsRepository) AddFriend(ctx context.Context, userID, friendID stri
 	`, userID, friendID)
 	return err
 }
+
+func (r *FriendsRepository) DeleteFriend(ctx context.Context, userID, friendID string) error {
+	_, err := r.cluster.Master().ExecContext(ctx, `
+		DELETE FROM friends WHERE user_id = $1 AND friend_id = $2
+	`, userID, friendID)
+	return err
+}

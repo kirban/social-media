@@ -17,3 +17,7 @@ func NewFriendsService(repo *repository.FriendsRepository) *FriendsService {
 func (s *FriendsService) AddFriend(ctx context.Context, userID, friendID string) error {
 	return s.repo.AddFriend(ctx, userID, friendID)
 }
+
+func (s *FriendsService) DeleteFriend(ctx context.Context, userID, friendID string) error {
+	return s.repo.DeleteFriend(ctx, userID, friendID)
+}
