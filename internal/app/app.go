@@ -119,7 +119,7 @@ func (s *AppServer) initLogger() error {
 func (s *AppServer) initRepositories() error {
 	s.repos = &repositories{
 		user:    repository.NewUserRepository(s.db),
-		post:    repository.NewPostRepository(s.db),
+		post:    repository.NewPostRepository(s.db, s.logger),
 		friends: repository.NewFriendsRepository(s.db),
 	}
 	return nil

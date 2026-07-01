@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/kirban/social-media/internal/db"
+	"github.com/kirban/social-media/internal/logger"
 	"github.com/kirban/social-media/internal/model"
 )
 
@@ -14,15 +15,16 @@ type PostRepositoryInterface interface {
 	GetById(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
 	Delete(ctx context.Context, id string) error
-	GetFeed(ctx context.Context, userID string) ([]model.Post, error)
+	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
 }
 
 type PostRepository struct {
 	cluster *db.Cluster
+	log     *logger.AppLogger
 }
 
-func NewPostRepository(cluster *db.Cluster) *PostRepository {
-	return &PostRepository{cluster: cluster}
+func NewPostRepository(cluster *db.Cluster, logger *logger.AppLogger) *PostRepository {
+	return &PostRepository{cluster: cluster, log: logger}
 }
 
 func (r *PostRepository) Create(ctx context.Context, p *model.Post) (string, error) {
@@ -82,17 +84,18 @@ func (r *PostRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *PostRepository) GetFeed(ctx context.Context, userID string) ([]model.Post, error) {
+func (r *PostRepository) GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error) {
 	rows, err := r.cluster.Replica().QueryContext(ctx, `
-		WITH friends_ids AS (
-			SELECT friend_id FROM friends WHERE user_id = $1
-		)
 		SELECT id, text, creator_id, created_at, updated_at
 		FROM posts
-		WHERE creator_id IN friends_ids
-		ORDER BY created_at ASC
-	`, userID)
+		WHERE creator_id IN (SELECT friend_id FROM friends WHERE user_id = $1)
+		ORDER BY created_at DESC
+		LIMIT $2
+		OFFSET $3
+	`, userID, limit, offset)
 	if err != nil {
+		r.log.Error().Err(err).Msg("feed get: during sql request")
+
 		return nil, err
 	}
 	defer rows.Close()
@@ -102,12 +105,14 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string) ([]model.Po
 	for rows.Next() {
 		var post model.Post
 		if err := rows.Scan(&post.ID, &post.Text, &post.CreatorID, &post.CreatedAt, &post.UpdatedAt); err != nil {
+			r.log.Error().Err(err).Msg("feed get: during rows scan")
 			return nil, err
 		}
 		feed = append(feed, post)
 	}
 
 	if err := rows.Err(); err != nil {
+		r.log.Error().Err(err).Msg("feed get: after rows scan")
 		return nil, err
 	}
 

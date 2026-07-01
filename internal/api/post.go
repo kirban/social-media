@@ -9,8 +9,21 @@ import (
 	"github.com/kirban/social-media/internal/service"
 )
 
+const DefaultLimit = 10
+const DefaultOffset = 0
+
 // (GET /post/feed)
 func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params GetPostFeedParams) {
+	var limit, offset int64
+
+	if params.Limit == nil {
+		limit = DefaultLimit
+	}
+
+	if params.Offset == nil {
+		offset = DefaultOffset
+	}
+
 	ctx := r.Context()
 	userID, ok := ctx.Value(middleware.UserIDKey).(string)
 	if !ok {
@@ -19,15 +32,17 @@ func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params Ge
 		return
 	}
 
-	feed, err := h.PostSvc.GetFeed(ctx, userID)
+	feed, err := h.PostSvc.GetFeed(ctx, userID, limit, offset)
 	if err != nil {
-		h.Logger.Error().Msg("GetPostFeed: failed to parse get feed")
+		h.Logger.Error().Msg("GetPostFeed: failed to get feed for user")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string][]model.Post{
-		"posts": feed,
+	writeJSON(w, http.StatusOK, map[string]any{
+		"posts":  feed,
+		"limit":  limit,
+		"offset": offset,
 	})
 
 }

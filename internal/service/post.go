@@ -9,7 +9,7 @@ import (
 )
 
 type PostsServiceInterface interface {
-	GetFeed(ctx context.Context, userID string) ([]model.Post, error)
+	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
 	Create(ctx context.Context, dto *model.Post) (string, error)
 	GetById(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string) error
@@ -26,8 +26,8 @@ func NewPostsService(repo *repository.PostRepository) *PostsService {
 	}
 }
 
-func (s *PostsService) GetFeed(ctx context.Context, userID string) ([]model.Post, error) {
-	feed, err := s.repo.GetFeed(ctx, userID)
+func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error) {
+	feed, err := s.repo.GetFeed(ctx, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
