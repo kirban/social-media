@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,10 +20,22 @@ import (
 	"github.com/kirban/social-media/internal/service"
 )
 
+type repositories struct {
+	user *repository.UserRepository
+	post *repository.PostRepository
+}
+
+type services struct {
+	user *service.UserService
+	post *service.PostsService
+}
+
 type AppServer struct {
 	config     *config.Config
 	logger     *applogger.AppLogger
 	db         *db.Cluster
+	repos      *repositories
+	svcs       *services
 	httpServer *http.Server
 }
 
@@ -65,6 +78,8 @@ func (s *AppServer) initDeps() error {
 		s.initLogger,
 		s.initDb,
 		s.initMigrations,
+		s.initRepositories,
+		s.initServices,
 		s.initHTTPServer,
 	}
 
@@ -99,6 +114,22 @@ func (s *AppServer) initLogger() error {
 	return nil
 }
 
+func (s *AppServer) initRepositories() error {
+	s.repos = &repositories{
+		user: repository.NewUserRepository(s.db),
+		post: repository.NewPostRepository(s.db),
+	}
+	return nil
+}
+
+func (s *AppServer) initServices() error {
+	s.svcs = &services{
+		user: service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
+		post: service.NewPostsService(s.repos.post),
+	}
+	return nil
+}
+
 func (s *AppServer) initHTTPServer() error {
 	r := chi.NewRouter()
 
@@ -112,16 +143,20 @@ func (s *AppServer) initHTTPServer() error {
 		Middlewares: []api.MiddlewareFunc{
 			appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes),
 		},
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(api.N5xx{Message: err.Error()})
+		},
 	}
-
-	userSvc := service.NewUserService(repository.NewUserRepository(s.db), s.config.Auth.JWTSecret)
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
 		Addr: addr,
 		Handler: api.HandlerWithOptions(&api.Handlers{
 			Logger:  s.logger,
-			UserSvc: userSvc,
+			UserSvc: s.svcs.user,
+			PostSvc: s.svcs.post,
 		}, so),
 	}
 	return nil

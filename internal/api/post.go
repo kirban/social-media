@@ -24,6 +24,7 @@ func (h *Handlers) PostPostCreate(w http.ResponseWriter, r *http.Request) {
 
 	if body.Text == "" {
 		writeError(w, r, http.StatusBadRequest, "text is not set")
+		return
 	}
 
 	ctx := r.Context()
