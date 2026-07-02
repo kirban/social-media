@@ -136,8 +136,8 @@ func (s *AppServer) initRepositories() error {
 func (s *AppServer) initServices() error {
 	s.svcs = &services{
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
-		post:    service.NewPostsService(s.repos.post),
-		friends: service.NewFriendsService(s.repos.friends),
+		post:    service.NewPostsService(s.repos.post, s.cache),
+		friends: service.NewFriendsService(s.repos.friends, s.cache),
 	}
 	return nil
 }

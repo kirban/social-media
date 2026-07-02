@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
+
 	"github.com/kirban/social-media/internal/db"
 	"github.com/kirban/social-media/internal/logger"
 	"github.com/kirban/social-media/internal/model"
@@ -12,10 +14,12 @@ import (
 
 type PostRepositoryInterface interface {
 	Create(ctx context.Context, post *model.Post) (string, error)
-	GetById(ctx context.Context, id string) (*model.Post, error)
+	GetByID(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
 	Delete(ctx context.Context, id string) error
 	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
+	GetFeedIDs(ctx context.Context, userID string, limit int64) ([]string, error)
+	GetByIDs(ctx context.Context, ids []string) ([]model.Post, error)
 }
 
 type PostRepository struct {
@@ -117,4 +121,61 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, limit, offs
 	}
 
 	return feed, nil
+}
+
+// GetFeedIDs returns feed ids only slice created_at desc (used to set in cache)
+func (r *PostRepository) GetFeedIDs(ctx context.Context, userID string, limit int64) ([]string, error) {
+	rows, err := r.cluster.Replica().QueryContext(ctx, `
+		SELECT id FROM posts
+		WHERE creator_id IN (SELECT friend_id FROM friends WHERE user_id = $1)
+		ORDER BY created_at DESC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// GetByIDs returns posts content by post ids provided
+func (r *PostRepository) GetByIDs(ctx context.Context, ids []string) ([]model.Post, error) {
+	rows, err := r.cluster.Replica().QueryContext(ctx, `
+		SELECT id, text, creator_id, created_at, updated_at
+		FROM posts
+		WHERE id = ANY($1)
+		ORDER BY created_at DESC
+	`, pq.Array(ids))
+	if err != nil {
+		r.log.Error().Err(err).Msg("posts get: during sql request")
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := make([]model.Post, 0)
+
+	for rows.Next() {
+		var post model.Post
+		if err := rows.Scan(&post.ID, &post.Text, &post.CreatorID, &post.CreatedAt, &post.UpdatedAt); err != nil {
+			r.log.Error().Err(err).Msg("posts get: during rows scan")
+			return nil, err
+		}
+		posts = append(posts, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.log.Error().Err(err).Msg("posts get: after rows scan")
+		return nil, err
+	}
+
+	return posts, nil
 }

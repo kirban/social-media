@@ -3,15 +3,20 @@ package service
 import (
 	"context"
 
+	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/repository"
 )
 
 type FriendsService struct {
-	repo *repository.FriendsRepository
+	repo  *repository.FriendsRepository
+	cache cache.Cache
 }
 
-func NewFriendsService(repo *repository.FriendsRepository) *FriendsService {
-	return &FriendsService{repo: repo}
+func NewFriendsService(repo *repository.FriendsRepository, c cache.Cache) *FriendsService {
+	return &FriendsService{
+		repo:  repo,
+		cache: c,
+	}
 }
 
 func (s *FriendsService) AddFriend(ctx context.Context, userID, friendID string) error {
