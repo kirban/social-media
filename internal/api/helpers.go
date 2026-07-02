@@ -25,9 +25,14 @@ func parseUUID(w http.ResponseWriter, r *http.Request, id string) bool {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	buf, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck
+	_, _ = w.Write(buf)
 }
 
 func strOrEmpty(s *string) string {
