@@ -74,6 +74,9 @@ func (s *AppServer) Run() {
 	s.logger.Info().Msg("Server started. Press CTRL+C to stop")
 	<-ctx.Done()
 	s.logger.Info().Msg("Got exit signal. Gracefully shutting down.")
+	if mc, ok := s.cache.(*cache.MemoryCache); ok {
+		mc.Stop()
+	}
 }
 
 func (s *AppServer) initDeps() error {

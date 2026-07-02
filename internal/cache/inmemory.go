@@ -17,14 +17,20 @@ type entry struct {
 type MemoryCache struct {
 	mu      sync.RWMutex
 	entries map[string]entry
+	stop    chan struct{}
 }
 
 func NewMemoryCache() *MemoryCache {
 	c := &MemoryCache{
 		entries: make(map[string]entry),
+		stop:    make(chan struct{}),
 	}
 	go c.cleanup(defaultCleanupInterval)
 	return c
+}
+
+func (c *MemoryCache) Stop() {
+	close(c.stop)
 }
 
 func (c *MemoryCache) Get(_ context.Context, key string) ([]byte, bool, error) {
@@ -65,14 +71,19 @@ func (c *MemoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
 func (c *MemoryCache) cleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		c.mu.Lock()
-		for k, e := range c.entries {
-			if now.After(e.expiresAt) {
-				delete(c.entries, k)
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now()
+			c.mu.Lock()
+			for k, e := range c.entries {
+				if now.After(e.expiresAt) {
+					delete(c.entries, k)
+				}
 			}
+			c.mu.Unlock()
+		case <-c.stop:
+			return
 		}
-		c.mu.Unlock()
 	}
 }
