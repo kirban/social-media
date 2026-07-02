@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/kirban/social-media/internal/api"
+	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/config"
 	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
@@ -36,6 +37,7 @@ type AppServer struct {
 	config     *config.Config
 	logger     *applogger.AppLogger
 	db         *db.Cluster
+	cache      cache.Cache
 	repos      *repositories
 	svcs       *services
 	httpServer *http.Server
@@ -80,6 +82,7 @@ func (s *AppServer) initDeps() error {
 		s.initLogger,
 		s.initDb,
 		s.initMigrations,
+		s.initCache,
 		s.initRepositories,
 		s.initServices,
 		s.initHTTPServer,
@@ -113,6 +116,11 @@ func (s *AppServer) initLogger() error {
 	}
 
 	s.logger = l
+	return nil
+}
+
+func (s *AppServer) initCache() error {
+	s.cache = cache.NewMemoryCache()
 	return nil
 }
 
