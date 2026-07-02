@@ -15,7 +15,7 @@ func (h *Handlers) GetUserById(w http.ResponseWriter, r *http.Request, id UserId
 	user, err := h.UserSvc.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
-			w.WriteHeader(http.StatusUnauthorized)
+			writeError(w, r, http.StatusNotFound, "not found")
 			return
 		}
 		h.Logger.Error().Err(err).Msg("GetUserById: find user")
