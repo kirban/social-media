@@ -18,10 +18,14 @@ func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params Ge
 
 	if params.Limit == nil {
 		limit = DefaultLimit
+	} else {
+		limit = int64(*params.Limit)
 	}
 
 	if params.Offset == nil {
 		offset = DefaultOffset
+	} else {
+		offset = int64(*params.Offset)
 	}
 
 	ctx := r.Context()
