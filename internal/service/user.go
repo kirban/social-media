@@ -44,7 +44,7 @@ func (s *UserService) Register(ctx context.Context, firstName, secondName, passw
 }
 
 func (s *UserService) Login(ctx context.Context, id, password string) (string, error) {
-	user, err := s.repo.FindByID(ctx, id)
+	user, err := s.repo.FindByIDMaster(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return "", ErrUnauthorized

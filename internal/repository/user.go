@@ -29,7 +29,16 @@ func (r *UserRepository) Create(ctx context.Context, u model.User) (string, erro
 }
 
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*model.User, error) {
-	row := r.cluster.Replica().QueryRowContext(ctx,
+	return r.findByID(ctx, r.cluster.Replica(), id)
+}
+
+// FindByIDMaster reads from the master to guarantee read-your-own-writes (e.g. login after register).
+func (r *UserRepository) FindByIDMaster(ctx context.Context, id string) (*model.User, error) {
+	return r.findByID(ctx, r.cluster.Master(), id)
+}
+
+func (r *UserRepository) findByID(ctx context.Context, db *sql.DB, id string) (*model.User, error) {
+	row := db.QueryRowContext(ctx,
 		`SELECT id, first_name, second_name, birthdate, COALESCE(biography, ''), city, password_hash
 		 FROM users WHERE id = $1`, id)
 
