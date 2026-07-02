@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/kirban/social-media/internal/cache"
+	"github.com/kirban/social-media/internal/logger"
+	"github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/repository"
 )
@@ -19,15 +21,23 @@ type PostsServiceInterface interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type PostsService struct {
-	repo  *repository.PostRepository
-	cache cache.Cache
+type FollowerLister interface {
+	ListFollowers(ctx context.Context, userID string) ([]string, error)
 }
 
-func NewPostsService(repo *repository.PostRepository, c cache.Cache) *PostsService {
+type PostsService struct {
+	log     *logger.AppLogger
+	repo    *repository.PostRepository
+	cache   cache.Cache
+	friends FollowerLister
+}
+
+func NewPostsService(repo *repository.PostRepository, c cache.Cache, f FollowerLister, log *logger.AppLogger) *PostsService {
 	return &PostsService{
-		repo:  repo,
-		cache: c,
+		repo:    repo,
+		cache:   c,
+		friends: f,
+		log:     log,
 	}
 }
 
@@ -70,6 +80,9 @@ func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset
 
 func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, error) {
 	id, err := s.repo.Create(ctx, dto)
+	if err == nil {
+		go s.invalidateFeedForUser(context.WithoutCancel(ctx), dto.CreatorID)
+	}
 	return id, err
 }
 
@@ -92,11 +105,39 @@ func (s *PostsService) Update(ctx context.Context, id string, post *model.Post) 
 }
 
 func (s *PostsService) Delete(ctx context.Context, id string) error {
+	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	if !ok {
+		return fmt.Errorf("failed to parse user id")
+	}
+
 	if err := s.repo.Delete(ctx, id); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return ErrNotFound
 		}
 		return err
+	}
+
+	go s.invalidateFeedForUser(context.WithoutCancel(ctx), userID)
+
+	return nil
+}
+
+func (s *PostsService) invalidateFeedForUser(ctx context.Context, userID string) error {
+	// get followers ids
+	followersIDs, err := s.friends.ListFollowers(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// delete cached feed entries
+	for _, followerID := range followersIDs {
+		cacheKey := fmt.Sprintf("user:%s:feed", followerID)
+		err := s.cache.Delete(ctx, cacheKey)
+		if err != nil {
+			msg := fmt.Sprintf("failed to invalidate user feed(%s). deleting key %s", userID, cacheKey)
+			s.log.Error().Err(err).Msg(msg)
+			continue
+		}
 	}
 	return nil
 }

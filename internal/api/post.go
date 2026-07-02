@@ -117,6 +117,8 @@ func (h *Handlers) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// todo: add check that user is creator of the post
+
 	if err := h.PostSvc.Update(r.Context(), body.Id, &model.Post{Text: body.Text}); err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			writeError(w, r, http.StatusNotFound, "not found")
@@ -135,6 +137,8 @@ func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id Po
 	if !parseUUID(w, r, id) {
 		return
 	}
+
+	// todo: add check that user is creator of the post or admin
 
 	if err := h.PostSvc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, service.ErrNotFound) {

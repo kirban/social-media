@@ -128,16 +128,17 @@ func (s *AppServer) initRepositories() error {
 	s.repos = &repositories{
 		user:    repository.NewUserRepository(s.db),
 		post:    repository.NewPostRepository(s.db, s.logger),
-		friends: repository.NewFriendsRepository(s.db),
+		friends: repository.NewFriendsRepository(s.db, s.logger),
 	}
 	return nil
 }
 
 func (s *AppServer) initServices() error {
+	friendsSvc := service.NewFriendsService(s.repos.friends, s.cache, s.logger)
 	s.svcs = &services{
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
-		post:    service.NewPostsService(s.repos.post, s.cache),
-		friends: service.NewFriendsService(s.repos.friends, s.cache),
+		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger),
+		friends: friendsSvc,
 	}
 	return nil
 }
