@@ -8,7 +8,6 @@ import (
 
 	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/logger"
-	"github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/repository"
 )
@@ -16,9 +15,9 @@ import (
 type PostsServiceInterface interface {
 	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
 	Create(ctx context.Context, dto *model.Post) (string, error)
-	GetById(ctx context.Context, id string) (*model.Post, error)
-	Update(ctx context.Context, id string) error
-	Delete(ctx context.Context, id string) error
+	GetByID(ctx context.Context, id string) (*model.Post, error)
+	Update(ctx context.Context, id string, post *model.Post) error
+	Delete(ctx context.Context, id, userID string) error
 }
 
 type FollowerLister interface {
@@ -104,12 +103,7 @@ func (s *PostsService) Update(ctx context.Context, id string, post *model.Post) 
 	return nil
 }
 
-func (s *PostsService) Delete(ctx context.Context, id string) error {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
-	if !ok {
-		return fmt.Errorf("failed to parse user id")
-	}
-
+func (s *PostsService) Delete(ctx context.Context, id, userID string) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return ErrNotFound

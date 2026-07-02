@@ -138,9 +138,17 @@ func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id Po
 		return
 	}
 
+	ctx := r.Context()
+	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	if !ok {
+		h.Logger.Error().Msg("PutPostDeleteId: failed to parse UserIDKey")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
 	// todo: add check that user is creator of the post or admin
 
-	if err := h.PostSvc.Delete(r.Context(), id); err != nil {
+	if err := h.PostSvc.Delete(ctx, id, userID); err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			writeError(w, r, http.StatusNotFound, "not found")
 			return
