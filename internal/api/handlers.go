@@ -2,16 +2,17 @@ package api
 
 import (
 	"github.com/kirban/social-media/internal/logger"
-	"github.com/kirban/social-media/internal/repository"
+	"github.com/kirban/social-media/internal/service"
 )
 
 // Handlers implements ServerInterface. Embed Unimplemented so adding new
 // endpoints to the spec doesn't break the build until they are wired up.
 type Handlers struct {
 	Unimplemented
-	Logger    *logger.AppLogger
-	JWTSecret string
-	UserRepo  *repository.UserRepository
+	Logger     *logger.AppLogger
+	UserSvc    *service.UserService
+	PostSvc    *service.PostsService
+	FriendsSvc *service.FriendsService
 }
 
 var _ ServerInterface = (*Handlers)(nil)

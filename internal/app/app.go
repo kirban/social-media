@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,17 +12,34 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/kirban/social-media/internal/api"
+	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/config"
 	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
 	appmiddleware "github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/repository"
+	"github.com/kirban/social-media/internal/service"
 )
+
+type repositories struct {
+	user    *repository.UserRepository
+	post    *repository.PostRepository
+	friends *repository.FriendsRepository
+}
+
+type services struct {
+	user    *service.UserService
+	post    *service.PostsService
+	friends *service.FriendsService
+}
 
 type AppServer struct {
 	config     *config.Config
 	logger     *applogger.AppLogger
 	db         *db.Cluster
+	cache      cache.Cache
+	repos      *repositories
+	svcs       *services
 	httpServer *http.Server
 }
 
@@ -56,6 +74,9 @@ func (s *AppServer) Run() {
 	s.logger.Info().Msg("Server started. Press CTRL+C to stop")
 	<-ctx.Done()
 	s.logger.Info().Msg("Got exit signal. Gracefully shutting down.")
+	if mc, ok := s.cache.(*cache.MemoryCache); ok {
+		mc.Stop()
+	}
 }
 
 func (s *AppServer) initDeps() error {
@@ -64,6 +85,9 @@ func (s *AppServer) initDeps() error {
 		s.initLogger,
 		s.initDb,
 		s.initMigrations,
+		s.initCache,
+		s.initRepositories,
+		s.initServices,
 		s.initHTTPServer,
 	}
 
@@ -98,6 +122,30 @@ func (s *AppServer) initLogger() error {
 	return nil
 }
 
+func (s *AppServer) initCache() error {
+	s.cache = cache.NewMemoryCache()
+	return nil
+}
+
+func (s *AppServer) initRepositories() error {
+	s.repos = &repositories{
+		user:    repository.NewUserRepository(s.db),
+		post:    repository.NewPostRepository(s.db, s.logger),
+		friends: repository.NewFriendsRepository(s.db, s.logger),
+	}
+	return nil
+}
+
+func (s *AppServer) initServices() error {
+	friendsSvc := service.NewFriendsService(s.repos.friends, s.cache, s.logger)
+	s.svcs = &services{
+		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
+		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger),
+		friends: friendsSvc,
+	}
+	return nil
+}
+
 func (s *AppServer) initHTTPServer() error {
 	r := chi.NewRouter()
 
@@ -111,15 +159,21 @@ func (s *AppServer) initHTTPServer() error {
 		Middlewares: []api.MiddlewareFunc{
 			appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes),
 		},
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(api.N5xx{Message: err.Error()})
+		},
 	}
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
 	s.httpServer = &http.Server{
 		Addr: addr,
 		Handler: api.HandlerWithOptions(&api.Handlers{
-			Logger:    s.logger,
-			JWTSecret: s.config.Auth.JWTSecret,
-			UserRepo:  repository.NewUserRepository(s.db),
+			Logger:     s.logger,
+			UserSvc:    s.svcs.user,
+			PostSvc:    s.svcs.post,
+			FriendsSvc: s.svcs.friends,
 		}, so),
 	}
 	return nil

@@ -1,22 +1,15 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"github.com/kirban/social-media/internal/model"
-	"github.com/kirban/social-media/internal/repository"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/kirban/social-media/internal/service"
 )
 
 func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
-	var body PostLoginJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	body, ok := decodeBody[PostLoginJSONRequestBody](w, r)
+	if !ok {
 		return
 	}
 
@@ -25,40 +18,20 @@ func (h *Handlers) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := uuid.Parse(*body.Id); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if !parseUUID(w, r, *body.Id) {
 		return
 	}
 
-	user, err := h.UserRepo.FindByID(r.Context(), *body.Id)
+	token, err := h.UserSvc.Login(r.Context(), *body.Id, *body.Password)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, service.ErrUnauthorized) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		h.Logger.Error().Err(err).Msg("PostLogin: find user")
+		h.Logger.Error().Err(err).Msg("PostLogin: login")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(*body.Password)); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	claims := model.UserClaims{
-		UserID: user.ID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-		},
-	}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(h.JWTSecret))
-	if err != nil {
-		h.Logger.Error().Err(err).Msg("PostLogin: sign token")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": token})
+	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
