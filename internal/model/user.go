@@ -1,7 +1,9 @@
 package model
 
+type UserID = string
+
 type User struct {
-	ID           string  `json:"id"`
+	ID           UserID  `json:"id"`
 	FirstName    string  `json:"first_name"`
 	SecondName   string  `json:"second_name"`
 	Birthdate    *string `json:"birthdate"`
