@@ -11,7 +11,7 @@ import (
 type DialogRepositoryInterface interface {
 	CreateMessage(ctx context.Context, dialogID model.DialogID, from, to model.UserID, text string) (*model.DialogMessageID, error)
 	GetDialogID(ctx context.Context, srcUser, dstUser model.UserID) (*model.DialogID, error)
-	ListMessages(ctx context.Context, dialogID model.DialogID) ([]model.DialogMessage, error)
+	ListMessages(ctx context.Context, dialogID *model.DialogID) ([]model.DialogMessage, error)
 
 	GetByID(ctx context.Context, id model.DialogID) (*model.Dialog, error)
 	Create(ctx context.Context, dto any) (*model.DialogID, error)
@@ -30,4 +30,16 @@ func NewDialogRepository(c *db.Cluster, l *logger.AppLogger) *DialogRepository {
 		cluster: c,
 		log:     l,
 	}
+}
+
+func (r *DialogRepository) CreateMessage(ctx context.Context, dialogID model.DialogID, from, to model.UserID, text string) (*model.DialogMessageID, error) {
+	return nil, nil
+}
+
+func (r *DialogRepository) GetDialogID(ctx context.Context, srcUser, dstUser model.UserID) (*model.DialogID, error) {
+	return nil, nil
+}
+
+func (r *DialogRepository) ListMessages(ctx context.Context, dialogID *model.DialogID) ([]model.DialogMessage, error) {
+	return nil, nil
 }
