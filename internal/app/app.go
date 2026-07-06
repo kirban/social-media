@@ -25,6 +25,7 @@ type repositories struct {
 	user    *repository.UserRepository
 	post    *repository.PostRepository
 	friends *repository.FriendsRepository
+	dialog  *repository.DialogRepository
 }
 
 type services struct {
@@ -132,6 +133,7 @@ func (s *AppServer) initRepositories() error {
 		user:    repository.NewUserRepository(s.db),
 		post:    repository.NewPostRepository(s.db, s.logger),
 		friends: repository.NewFriendsRepository(s.db, s.logger),
+		dialog:  repository.NewDialogRepository(s.db, s.logger),
 	}
 	return nil
 }
