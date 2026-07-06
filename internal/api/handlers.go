@@ -13,6 +13,7 @@ type Handlers struct {
 	UserSvc    *service.UserService
 	PostSvc    *service.PostsService
 	FriendsSvc *service.FriendsService
+	DialogSvc  *service.DialogService
 }
 
 var _ ServerInterface = (*Handlers)(nil)

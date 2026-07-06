@@ -32,6 +32,7 @@ type services struct {
 	user    *service.UserService
 	post    *service.PostsService
 	friends *service.FriendsService
+	dialog  *service.DialogService
 }
 
 type AppServer struct {
@@ -144,6 +145,7 @@ func (s *AppServer) initServices() error {
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
 		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger),
 		friends: friendsSvc,
+		dialog:  service.NewDialogService(s.logger, s.repos.dialog),
 	}
 	return nil
 }
@@ -176,6 +178,7 @@ func (s *AppServer) initHTTPServer() error {
 			UserSvc:    s.svcs.user,
 			PostSvc:    s.svcs.post,
 			FriendsSvc: s.svcs.friends,
+			DialogSvc:  s.svcs.dialog,
 		}, so),
 	}
 	return nil
