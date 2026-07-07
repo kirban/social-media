@@ -8,6 +8,10 @@ import (
 
 // (GET /dialog/{user_id}/list)
 func (h *Handlers) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, dstUser UserId) {
+	if !parseUUID(w, r, dstUser) {
+		return
+	}
+
 	ctx := r.Context()
 	userID, ok := ctx.Value(middleware.UserIDKey).(string)
 	if !ok {
@@ -32,6 +36,10 @@ func (h *Handlers) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, d
 
 // (POST /dialog/{user_id}/send)
 func (h *Handlers) PostDialogUserIdSend(w http.ResponseWriter, r *http.Request, dstUser UserId) {
+	if !parseUUID(w, r, dstUser) {
+		return
+	}
+
 	ctx := r.Context()
 	userID, ok := ctx.Value(middleware.UserIDKey).(string)
 	if !ok {
