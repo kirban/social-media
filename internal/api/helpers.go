@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -40,4 +41,21 @@ func strOrEmpty(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func parsePageParams(r *http.Request, defaultLimit, defaultOffset int64) (limit, offset int64) {
+	limit = defaultLimit
+	offset = defaultOffset
+	q := r.URL.Query()
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if v := q.Get("offset"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	return
 }

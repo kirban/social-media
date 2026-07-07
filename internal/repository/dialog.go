@@ -14,7 +14,7 @@ import (
 type DialogRepositoryInterface interface {
 	CreateMessage(ctx context.Context, dialogID *model.DialogID, from, to model.UserID, text string) (*model.DialogMessageID, error)
 	GetDialogID(ctx context.Context, srcUser, dstUser model.UserID) (*model.DialogID, error)
-	ListMessages(ctx context.Context, dialogID *model.DialogID) ([]model.DialogMessage, error)
+	ListMessages(ctx context.Context, dialogID *model.DialogID, limit, offset int64) ([]model.DialogMessage, error)
 	CreateDialog(ctx context.Context, dto *model.CreateDialogDTO) (*model.DialogID, error)
 
 	GetByID(ctx context.Context, id model.DialogID) (*model.Dialog, error)
@@ -67,13 +67,14 @@ func (r *DialogRepository) GetDialogID(ctx context.Context, srcUser, dstUser mod
 	return &dialogID, nil
 }
 
-func (r *DialogRepository) ListMessages(ctx context.Context, dialogID *model.DialogID) ([]model.DialogMessage, error) {
+func (r *DialogRepository) ListMessages(ctx context.Context, dialogID *model.DialogID, limit, offset int64) ([]model.DialogMessage, error) {
 	rows, err := r.cluster.Replica().QueryContext(ctx,
 		`SELECT id, "from", "to", dialog_id, text, created_at, updated_at
 		FROM "dialog_message"
 		WHERE dialog_id = $1
-		ORDER BY created_at ASC;`,
-		dialogID,
+		ORDER BY created_at ASC
+		LIMIT $2 OFFSET $3;`,
+		dialogID, limit, offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list messages: %w", err)

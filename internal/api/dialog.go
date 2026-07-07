@@ -12,6 +12,8 @@ func (h *Handlers) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, d
 		return
 	}
 
+	limit, offset := parsePageParams(r, DefaultLimit, DefaultOffset)
+
 	ctx := r.Context()
 	userID, ok := ctx.Value(middleware.UserIDKey).(string)
 	if !ok {
@@ -20,7 +22,7 @@ func (h *Handlers) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, d
 		return
 	}
 
-	messages, err := h.DialogSvc.GetMessages(ctx, userID, dstUser)
+	messages, err := h.DialogSvc.GetMessages(ctx, userID, dstUser, limit, offset)
 	if err != nil {
 		h.Logger.Error().Err(err).Msg("GetDialogUserIdList: failed to get dialog messages")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
@@ -29,8 +31,8 @@ func (h *Handlers) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, d
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"messages": messages,
-		// "limit":  limit,
-		// "offset": offset,
+		"limit":    limit,
+		"offset":   offset,
 	})
 }
 

@@ -11,7 +11,7 @@ import (
 )
 
 type DialogServiceInterface interface {
-	GetMessages(ctx context.Context, srcUser, dstUser model.UserID) ([]model.DialogMessage, error)
+	GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error)
 	SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error)
 }
 
@@ -27,7 +27,7 @@ func NewDialogService(l *logger.AppLogger, r *repository.DialogRepository) *Dial
 	}
 }
 
-func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.UserID) ([]model.DialogMessage, error) {
+func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error) {
 	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -36,7 +36,7 @@ func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.
 		return nil, err
 	}
 
-	messages, err := s.repo.ListMessages(ctx, dialogID)
+	messages, err := s.repo.ListMessages(ctx, dialogID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
