@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"slices"
 
 	"github.com/kirban/social-media/internal/logger"
 	"github.com/kirban/social-media/internal/model"
@@ -40,12 +42,28 @@ func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.
 }
 
 func (s *DialogService) SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error) {
+	var dialogID *model.DialogID
 	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, repository.ErrNotFound) {
+			ids := []string{srcUser, dstUser}
+			slices.Sort(ids)
+			var users [2]model.UserID
+			copy(users[:], ids)
+			dto := &model.CreateDialogDTO{
+				Users: users,
+			}
+			newDID, err := s.repo.CreateDialog(ctx, dto)
+			if err != nil {
+				return nil, err
+			}
+			dialogID = newDID
+		} else {
+			return nil, err
+		}
 	}
 
-	messageID, err := s.repo.CreateMessage(ctx, *dialogID, srcUser, dstUser, text)
+	messageID, err := s.repo.CreateMessage(ctx, dialogID, srcUser, dstUser, text)
 	if err != nil {
 		return nil, err
 	}
