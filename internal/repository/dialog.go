@@ -68,7 +68,31 @@ func (r *DialogRepository) GetDialogID(ctx context.Context, srcUser, dstUser mod
 }
 
 func (r *DialogRepository) ListMessages(ctx context.Context, dialogID *model.DialogID) ([]model.DialogMessage, error) {
-	return nil, nil
+	rows, err := r.cluster.Replica().QueryContext(ctx,
+		`SELECT id, "from", "to", dialog_id, text, created_at, updated_at
+		FROM "dialog_message"
+		WHERE dialog_id = $1
+		ORDER BY created_at ASC;`,
+		dialogID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []model.DialogMessage
+	for rows.Next() {
+		var m model.DialogMessage
+		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.DialogID, &m.Text, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan message: %w", err)
+		}
+		messages = append(messages, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate messages: %w", err)
+	}
+
+	return messages, nil
 }
 
 func (r *DialogRepository) CreateDialog(ctx context.Context, dto *model.CreateDialogDTO) (*model.DialogID, error) {

@@ -30,6 +30,9 @@ func NewDialogService(l *logger.AppLogger, r *repository.DialogRepository) *Dial
 func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.UserID) ([]model.DialogMessage, error) {
 	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return []model.DialogMessage{}, nil
+		}
 		return nil, err
 	}
 
