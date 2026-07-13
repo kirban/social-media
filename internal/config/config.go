@@ -40,6 +40,11 @@ type ReplicaConfig struct {
 type ServerConfig struct {
 	Host string `yaml:"host" env:"APP_HOST" env-default:"0.0.0.0"`
 	Port string `yaml:"port" env:"APP_PORT" env-required:"true" env-default:"8080"`
+	// WSAllowedOrigins are Origin header host patterns accepted on WebSocket
+	// upgrade (e.g. "app.example.com", "*.example.com"). Empty means same-origin
+	// only. Bearer-token auth already blocks cross-site hijacking, so widen this
+	// only for legitimate cross-origin browser clients.
+	WSAllowedOrigins []string `yaml:"ws_allowed_origins" env:"WS_ALLOWED_ORIGINS"`
 }
 
 type AuthConfig struct {

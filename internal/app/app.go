@@ -19,6 +19,7 @@ import (
 	appmiddleware "github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/repository"
 	"github.com/kirban/social-media/internal/service"
+	"github.com/kirban/social-media/internal/transport/websocket"
 )
 
 type repositories struct {
@@ -42,6 +43,7 @@ type AppServer struct {
 	cache      cache.Cache
 	repos      *repositories
 	svcs       *services
+	hub        *websocket.Hub
 	httpServer *http.Server
 }
 
@@ -65,6 +67,8 @@ func (s *AppServer) Run() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	go s.hub.Run(ctx)
 
 	go func() {
 		s.logger.Info().Msgf("HTTP server listening on %s", s.httpServer.Addr)
@@ -90,6 +94,7 @@ func (s *AppServer) initDeps() error {
 		s.initCache,
 		s.initRepositories,
 		s.initServices,
+		s.initHub,
 		s.initHTTPServer,
 	}
 
@@ -171,6 +176,21 @@ func (s *AppServer) initHTTPServer() error {
 	}
 
 	addr := fmt.Sprintf("%s:%s", s.config.Server.Host, s.config.Server.Port)
+
+	r.Group(func(r chi.Router) {
+		// The generated API seeds this scope key per route; a hand-mounted route
+		// must do the same, or Auth treats the endpoint as public and skips the
+		// JWT check (see middleware.Auth).
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := context.WithValue(r.Context(), api.BearerAuthScopes, []string{})
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		})
+		r.Use(appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes))
+		r.Get("/ws", s.hub.ServeWS)
+	})
+
 	s.httpServer = &http.Server{
 		Addr: addr,
 		Handler: api.HandlerWithOptions(&api.Handlers{
@@ -196,4 +216,9 @@ func (s *AppServer) initDb() error {
 
 func (s *AppServer) initMigrations() error {
 	return s.db.Migrate()
+}
+
+func (s *AppServer) initHub() error {
+	s.hub = websocket.NewHub(s.logger, s.config.Server.WSAllowedOrigins)
+	return nil
 }
