@@ -1,0 +1,108 @@
+# Citus sharding stack for the dialog domain (Task 5).
+#
+# Run from the repository root:
+#   docker compose --env-file .env -f deployments/docker-compose-citus.yaml up --build
+#
+# Add a third worker + rebalance shards online (no downtime):
+#   docker compose --env-file .env -f deployments/docker-compose-citus.yaml \
+#       --profile reshard up -d citus-worker-3
+#   # then run the resharding SQL from docs/task5/sharding.md
+#
+# Auth is `trust` on the private pgnet network — DEV/COURSE ONLY.
+
+x-worker: &worker
+  image: citusdata/citus:13.0
+  restart: unless-stopped
+  networks:
+    - pgnet
+  environment:
+    POSTGRES_DB: ${DB_NAME}
+    POSTGRES_USER: ${DB_USER}
+    POSTGRES_PASSWORD: ${DB_PASSWORD}
+    POSTGRES_HOST_AUTH_METHOD: trust
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+
+services:
+  citus-coordinator:
+    <<: *worker
+    container_name: citus-coordinator
+    ports:
+      - "5432:5432"
+    volumes:
+      - sm-citus-coord:/var/lib/postgresql/data
+
+  citus-worker-1:
+    <<: *worker
+    container_name: citus-worker-1
+    volumes:
+      - sm-citus-w1:/var/lib/postgresql/data
+
+  citus-worker-2:
+    <<: *worker
+    container_name: citus-worker-2
+    volumes:
+      - sm-citus-w2:/var/lib/postgresql/data
+
+  # Extra worker for the no-downtime resharding demo. Started only with the
+  # "reshard" profile; register it with citus_add_node (see docs/task5).
+  citus-worker-3:
+    <<: *worker
+    container_name: citus-worker-3
+    profiles: ["reshard"]
+    volumes:
+      - sm-citus-w3:/var/lib/postgresql/data
+
+  # One-shot: registers workers, waits for the app schema, shards the tables.
+  citus-init:
+    image: postgres:16
+    container_name: citus-init
+    restart: "no"
+    networks:
+      - pgnet
+    env_file:
+      - ../.env
+    environment:
+      COORDINATOR_HOST: citus-coordinator
+    entrypoint: ["bash", "/init.sh"]
+    volumes:
+      - ./citus/init.sh:/init.sh:ro
+      - ./citus/distribute.sql:/distribute.sql:ro
+    depends_on:
+      citus-coordinator:
+        condition: service_healthy
+      citus-worker-1:
+        condition: service_healthy
+      citus-worker-2:
+        condition: service_healthy
+
+  sm-app:
+    container_name: sm-app
+    build:
+      context: ..
+      dockerfile: build/package/Dockerfile
+    ports:
+      - "8282:8080"
+    networks:
+      - pgnet
+    env_file:
+      - ../.env
+    volumes:
+      # Override the baked-in config so the app targets the Citus coordinator.
+      - ../configs/app-config-citus.yaml:/app/configs/app-config.yaml:ro
+    depends_on:
+      citus-coordinator:
+        condition: service_healthy
+
+networks:
+  pgnet:
+    driver: bridge
+
+volumes:
+  sm-citus-coord:
+  sm-citus-w1:
+  sm-citus-w2:
+  sm-citus-w3:

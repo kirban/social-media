@@ -25,12 +25,14 @@ type repositories struct {
 	user    *repository.UserRepository
 	post    *repository.PostRepository
 	friends *repository.FriendsRepository
+	dialog  *repository.DialogRepository
 }
 
 type services struct {
 	user    *service.UserService
 	post    *service.PostsService
 	friends *service.FriendsService
+	dialog  *service.DialogService
 }
 
 type AppServer struct {
@@ -132,6 +134,7 @@ func (s *AppServer) initRepositories() error {
 		user:    repository.NewUserRepository(s.db),
 		post:    repository.NewPostRepository(s.db, s.logger),
 		friends: repository.NewFriendsRepository(s.db, s.logger),
+		dialog:  repository.NewDialogRepository(s.db, s.logger),
 	}
 	return nil
 }
@@ -142,6 +145,7 @@ func (s *AppServer) initServices() error {
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
 		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger),
 		friends: friendsSvc,
+		dialog:  service.NewDialogService(s.logger, s.repos.dialog),
 	}
 	return nil
 }
@@ -174,6 +178,7 @@ func (s *AppServer) initHTTPServer() error {
 			UserSvc:    s.svcs.user,
 			PostSvc:    s.svcs.post,
 			FriendsSvc: s.svcs.friends,
+			DialogSvc:  s.svcs.dialog,
 		}, so),
 	}
 	return nil

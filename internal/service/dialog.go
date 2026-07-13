@@ -1,0 +1,75 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"slices"
+
+	"github.com/kirban/social-media/internal/logger"
+	"github.com/kirban/social-media/internal/model"
+	"github.com/kirban/social-media/internal/repository"
+)
+
+type DialogServiceInterface interface {
+	GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error)
+	SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error)
+}
+
+type DialogService struct {
+	log  *logger.AppLogger
+	repo *repository.DialogRepository
+}
+
+func NewDialogService(l *logger.AppLogger, r *repository.DialogRepository) *DialogService {
+	return &DialogService{
+		log:  l,
+		repo: r,
+	}
+}
+
+func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error) {
+	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return []model.DialogMessage{}, nil
+		}
+		return nil, err
+	}
+
+	messages, err := s.repo.ListMessages(ctx, dialogID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
+func (s *DialogService) SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error) {
+	var dialogID *model.DialogID
+	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			ids := []string{srcUser, dstUser}
+			slices.Sort(ids)
+			var users [2]model.UserID
+			copy(users[:], ids)
+			dto := &model.CreateDialogDTO{
+				Users: users,
+			}
+			newDID, err := s.repo.CreateDialog(ctx, dto)
+			if err != nil {
+				return nil, err
+			}
+			dialogID = newDID
+		} else {
+			return nil, err
+		}
+	}
+
+	messageID, err := s.repo.CreateMessage(ctx, dialogID, srcUser, dstUser, text)
+	if err != nil {
+		return nil, err
+	}
+
+	return messageID, nil
+}
