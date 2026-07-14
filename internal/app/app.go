@@ -36,6 +36,13 @@ type services struct {
 	dialog  *service.DialogService
 }
 
+// hubs holds one WebSocket hub per async channel. Each channel is an
+// independent endpoint with its own connection registry, so a message pushed on
+// one channel never leaks onto another.
+type hubs struct {
+	feedPosted *websocket.Hub
+}
+
 type AppServer struct {
 	config     *config.Config
 	logger     *applogger.AppLogger
@@ -43,7 +50,7 @@ type AppServer struct {
 	cache      cache.Cache
 	repos      *repositories
 	svcs       *services
-	hub        *websocket.Hub
+	hubs       *hubs
 	httpServer *http.Server
 }
 
@@ -68,7 +75,7 @@ func (s *AppServer) Run() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go s.hub.Run(ctx)
+	go s.hubs.feedPosted.Run(ctx)
 
 	go func() {
 		s.logger.Info().Msgf("HTTP server listening on %s", s.httpServer.Addr)
@@ -93,8 +100,8 @@ func (s *AppServer) initDeps() error {
 		s.initMigrations,
 		s.initCache,
 		s.initRepositories,
+		s.initHubs,
 		s.initServices,
-		s.initHub,
 		s.initHTTPServer,
 	}
 
@@ -148,7 +155,7 @@ func (s *AppServer) initServices() error {
 	friendsSvc := service.NewFriendsService(s.repos.friends, s.cache, s.logger)
 	s.svcs = &services{
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
-		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger),
+		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger, s.hubs.feedPosted),
 		friends: friendsSvc,
 		dialog:  service.NewDialogService(s.logger, s.repos.dialog),
 	}
@@ -188,7 +195,8 @@ func (s *AppServer) initHTTPServer() error {
 			})
 		})
 		r.Use(appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes))
-		r.Get("/ws", s.hub.ServeWS)
+		// Async channel /post/feed/posted (AsyncAPI spec): friends' new-post feed.
+		r.Get("/post/feed/posted", s.hubs.feedPosted.ServeWS)
 	})
 
 	s.httpServer = &http.Server{
@@ -218,7 +226,9 @@ func (s *AppServer) initMigrations() error {
 	return s.db.Migrate()
 }
 
-func (s *AppServer) initHub() error {
-	s.hub = websocket.NewHub(s.logger, s.config.Server.WSAllowedOrigins)
+func (s *AppServer) initHubs() error {
+	s.hubs = &hubs{
+		feedPosted: websocket.NewHub(s.logger, s.config.Server.WSAllowedOrigins),
+	}
 	return nil
 }

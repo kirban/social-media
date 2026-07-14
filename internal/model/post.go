@@ -9,3 +9,9 @@ type Post struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type FeedPostedMessage struct {
+	PostID       string `json:"postId"`
+	PostText     string `json:"postText"`
+	AuthorUserID string `json:"author_user_id"`
+}
