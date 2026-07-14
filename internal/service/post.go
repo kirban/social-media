@@ -10,6 +10,7 @@ import (
 	"github.com/kirban/social-media/internal/logger"
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/repository"
+	"github.com/kirban/social-media/internal/transport/websocket"
 )
 
 type PostsServiceInterface interface {
@@ -29,14 +30,16 @@ type PostsService struct {
 	repo    *repository.PostRepository
 	cache   cache.Cache
 	friends FollowerLister
+	hub     *websocket.Hub
 }
 
-func NewPostsService(repo *repository.PostRepository, c cache.Cache, f FollowerLister, log *logger.AppLogger) *PostsService {
+func NewPostsService(repo *repository.PostRepository, c cache.Cache, f FollowerLister, log *logger.AppLogger, h *websocket.Hub) *PostsService {
 	return &PostsService{
 		repo:    repo,
 		cache:   c,
 		friends: f,
 		log:     log,
+		hub:     h,
 	}
 }
 
@@ -79,11 +82,37 @@ func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset
 
 func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, error) {
 	post, err := s.repo.Create(ctx, dto)
-	if err == nil {
-		go s.invalidateFeedForUser(context.WithoutCancel(ctx), post.CreatorID)
+	if err != nil {
+		return "", err
 	}
 
+	go s.invalidateFeedForUser(context.WithoutCancel(ctx), post.CreatorID)
+	go s.notifyFollowers(ctx, post.CreatorID, post.ID, post.Text)
 	return post.ID, err
+}
+
+func (s *PostsService) notifyFollowers(ctx context.Context, authorID, postID, text string) error {
+	followers, err := s.friends.ListFollowers(ctx, authorID)
+	if err != nil {
+		s.log.Error().Err(err).Str("authorID", authorID).Msg("notifyFollowers: listFollowers failed")
+		return err
+	}
+
+	msg, err := json.Marshal(model.FeedPostedMessage{
+		PostID:       postID,
+		PostText:     text,
+		AuthorUserID: authorID,
+	})
+	if err != nil {
+		s.log.Error().Err(err).Str("authorID", authorID).Msg("notifyFollowers: msg marshal failed")
+		return err
+	}
+
+	for _, f := range followers {
+		s.hub.Send(f, msg)
+	}
+
+	return nil
 }
 
 func (s *PostsService) GetByID(ctx context.Context, id string) (*model.Post, error) {
