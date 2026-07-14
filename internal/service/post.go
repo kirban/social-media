@@ -78,11 +78,12 @@ func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset
 }
 
 func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, error) {
-	id, err := s.repo.Create(ctx, dto)
+	post, err := s.repo.Create(ctx, dto)
 	if err == nil {
-		go s.invalidateFeedForUser(context.WithoutCancel(ctx), dto.CreatorID)
+		go s.invalidateFeedForUser(context.WithoutCancel(ctx), post.CreatorID)
 	}
-	return id, err
+
+	return post.ID, err
 }
 
 func (s *PostsService) GetByID(ctx context.Context, id string) (*model.Post, error) {

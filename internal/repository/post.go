@@ -13,7 +13,7 @@ import (
 )
 
 type PostRepositoryInterface interface {
-	Create(ctx context.Context, post *model.Post) (string, error)
+	Create(ctx context.Context, post *model.Post) (*model.Post, error)
 	GetByID(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
 	Delete(ctx context.Context, id string) error
@@ -31,13 +31,21 @@ func NewPostRepository(cluster *db.Cluster, logger *logger.AppLogger) *PostRepos
 	return &PostRepository{cluster: cluster, log: logger}
 }
 
-func (r *PostRepository) Create(ctx context.Context, p *model.Post) (string, error) {
-	var id string
+func (r *PostRepository) Create(ctx context.Context, p *model.Post) (*model.Post, error) {
+	var id, creator, text string
 	err := r.cluster.Master().QueryRowContext(ctx, `
 		INSERT INTO posts (text, creator_id) VALUES ($1, $2)
-		RETURNING id
-	`, p.Text, p.CreatorID).Scan(&id)
-	return id, err
+		RETURNING id, creator_id, text
+	`, p.Text, p.CreatorID).Scan(&id, &creator, &text)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.Post{
+		ID:        id,
+		Text:      text,
+		CreatorID: creator,
+	}, err
 }
 
 func (r *PostRepository) GetByID(ctx context.Context, id string) (*model.Post, error) {
