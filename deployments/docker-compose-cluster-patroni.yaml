@@ -175,11 +175,30 @@ services:
       DB_HOST: sm-haproxy
       DB_PORT: "5432"
       DB_SSL_MODE: disable
+      NATS_URL: nats://sm-nats:4222
     volumes:
       - ../configs/app-config-patroni.yaml:/app/configs/app-config.yaml:ro
     depends_on:
       - sm-haproxy
+      - sm-nats
     restart: unless-stopped
+
+  sm-nats:
+    container_name: sm-nats
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    networks:
+      - pgnet-patroni
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - sm-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 networks:
   pgnet-patroni:
@@ -189,5 +208,6 @@ volumes:
   sm-patroni-etcd-data:
   sm-patroni-node2-data:
   sm-patroni-node3-data:
+  sm-nats-data:
   social-media_sm-data-master:
     external: true

@@ -11,7 +11,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/kirban/social-media/internal/api"
+	"github.com/kirban/social-media/internal/broker"
 	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/config"
 	"github.com/kirban/social-media/internal/db"
@@ -44,14 +48,18 @@ type hubs struct {
 }
 
 type AppServer struct {
-	config     *config.Config
-	logger     *applogger.AppLogger
-	db         *db.Cluster
-	cache      cache.Cache
-	repos      *repositories
-	svcs       *services
-	hubs       *hubs
-	httpServer *http.Server
+	config       *config.Config
+	logger       *applogger.AppLogger
+	db           *db.Cluster
+	cache        cache.Cache
+	repos        *repositories
+	svcs         *services
+	hubs         *hubs
+	httpServer   *http.Server
+	natsConn     *nats.Conn
+	stream       jetstream.Stream
+	publisher    *broker.Publisher
+	feedConsumer *broker.Consumer
 }
 
 func NewAppServer() (*AppServer, error) {
@@ -78,6 +86,12 @@ func (s *AppServer) Run() {
 	go s.hubs.feedPosted.Run(ctx)
 
 	go func() {
+		if err := s.feedConsumer.Run(ctx); err != nil {
+			s.logger.Error().Err(err).Msg("feed fan-out consumer stopped")
+		}
+	}()
+
+	go func() {
 		s.logger.Info().Msgf("HTTP server listening on %s", s.httpServer.Addr)
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.logger.Error().Err(err).Msg("HTTP server error")
@@ -90,6 +104,7 @@ func (s *AppServer) Run() {
 	if mc, ok := s.cache.(*cache.MemoryCache); ok {
 		mc.Stop()
 	}
+	s.natsConn.Close()
 }
 
 func (s *AppServer) initDeps() error {
@@ -101,6 +116,7 @@ func (s *AppServer) initDeps() error {
 		s.initCache,
 		s.initRepositories,
 		s.initHubs,
+		s.initBroker,
 		s.initServices,
 		s.initHTTPServer,
 	}
@@ -151,14 +167,38 @@ func (s *AppServer) initRepositories() error {
 	return nil
 }
 
+// initBroker connects to NATS, ensures the POSTS stream exists, and builds the
+// event publisher used by PostsService. The per-instance fan-out consumer is
+// built in initServices (it needs the friends service) and started in Run.
+func (s *AppServer) initBroker() error {
+	nc, js, err := broker.Connect(s.config.NATS)
+	if err != nil {
+		return err
+	}
+
+	stream, err := broker.EnsureStream(context.Background(), js, s.config.NATS)
+	if err != nil {
+		nc.Close()
+		return err
+	}
+
+	s.natsConn = nc
+	s.stream = stream
+	s.publisher = broker.NewPublisher(js, s.config.NATS, s.logger)
+	return nil
+}
+
 func (s *AppServer) initServices() error {
 	friendsSvc := service.NewFriendsService(s.repos.friends, s.cache, s.logger)
 	s.svcs = &services{
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
-		post:    service.NewPostsService(s.repos.post, s.cache, friendsSvc, s.logger, s.hubs.feedPosted),
+		post:    service.NewPostsService(s.repos.post, s.cache, s.logger, s.publisher),
 		friends: friendsSvc,
 		dialog:  service.NewDialogService(s.logger, s.repos.dialog),
 	}
+
+	fanout := broker.NewFeedFanout(friendsSvc, s.cache, s.hubs.feedPosted, s.logger)
+	s.feedConsumer = broker.NewConsumer(s.stream, s.config.NATS, fanout, s.logger)
 	return nil
 }
 

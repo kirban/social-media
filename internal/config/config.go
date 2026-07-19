@@ -15,20 +15,21 @@ type Config struct {
 	Env      string       `yaml:"env" env:"ENV" env-required:"true"`
 	Database DBConfig     `yaml:"app_db"`
 	Server   ServerConfig `yaml:"app_server"`
+	NATS     NATSConfig   `yaml:"nats"`
 	Auth     AuthConfig   `yaml:"-"`
 	LogLevel string       `yaml:"log_level" env:"LOG_LEVEL" env-default:"debug"`
 }
 
 type DBConfig struct {
-	Host            string         `yaml:"host" env:"DB_HOST" env-required:"true"`
-	Port            string         `yaml:"port" env:"DB_PORT" env-required:"true"`
-	DBName          string         `yaml:"database" env:"DB_NAME" env-required:"true"`
-	Username        string         `env:"DB_USER" env-required:"true"`
-	Password        string         `env:"DB_PASSWORD" env-required:"true"`
-	SSLMode         string         `yaml:"ssl_mode" env:"DB_SSL_MODE" env-required:"true"`
-	MaxOpenConns    int            `yaml:"max_open_conns" env-default:"25"`
-	MaxIdleConns    int            `yaml:"max_idle_conns" env-default:"25"`
-	MaxConnLifetime time.Duration  `yaml:"max_conn_lifetime" env-default:"5m"`
+	Host            string          `yaml:"host" env:"DB_HOST" env-required:"true"`
+	Port            string          `yaml:"port" env:"DB_PORT" env-required:"true"`
+	DBName          string          `yaml:"database" env:"DB_NAME" env-required:"true"`
+	Username        string          `env:"DB_USER" env-required:"true"`
+	Password        string          `env:"DB_PASSWORD" env-required:"true"`
+	SSLMode         string          `yaml:"ssl_mode" env:"DB_SSL_MODE" env-required:"true"`
+	MaxOpenConns    int             `yaml:"max_open_conns" env-default:"25"`
+	MaxIdleConns    int             `yaml:"max_idle_conns" env-default:"25"`
+	MaxConnLifetime time.Duration   `yaml:"max_conn_lifetime" env-default:"5m"`
 	Replicas        []ReplicaConfig `yaml:"replicas"`
 }
 
@@ -45,6 +46,16 @@ type ServerConfig struct {
 	// only. Bearer-token auth already blocks cross-site hijacking, so widen this
 	// only for legitimate cross-origin browser clients.
 	WSAllowedOrigins []string `yaml:"ws_allowed_origins" env:"WS_ALLOWED_ORIGINS"`
+}
+
+// NATSConfig configures the JetStream broker used for feed fan-out. The stream
+// is a short-lived buffer (MaxAge) for post events, not a system of record.
+type NATSConfig struct {
+	URL            string        `yaml:"url" env:"NATS_URL" env-default:"nats://localhost:4222"`
+	Stream         string        `yaml:"stream" env:"NATS_STREAM" env-default:"POSTS"`
+	SubjectPrefix  string        `yaml:"subject_prefix" env:"NATS_SUBJECT_PREFIX" env-default:"posts"`
+	MaxAge         time.Duration `yaml:"max_age" env:"NATS_MAX_AGE" env-default:"10m"`
+	PublishRetries int           `yaml:"publish_retries" env:"NATS_PUBLISH_RETRIES" env-default:"3"`
 }
 
 type AuthConfig struct {
