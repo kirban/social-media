@@ -126,6 +126,7 @@
     },
     "/user/get/{id}": {
       "get": {
+        "operationId": "getUserById",
         "description": "Получение анкеты пользователя",
         "parameters": [
           {
@@ -207,6 +208,41 @@
           },
           "400": {
             "description": "Невалидные данные"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/friend/list": {
+      "get": {
+        "operationId": "getFriendList",
+        "description": "Список пользователей, на которых подписан текущий пользователь. Их посты формируют ленту.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешно получен список друзей",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
           },
           "500": {
             "$ref": "#/components/responses/5xx"
@@ -317,7 +353,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PostId"
+                  "type": "object",
+                  "required": ["post_id"],
+                  "properties": {
+                    "post_id": {
+                      "$ref": "#/components/schemas/PostId"
+                    }
+                  }
                 }
               }
             }
@@ -464,28 +506,10 @@
         ],
         "parameters": [
           {
-            "name": "offset",
-            "schema": {
-              "type": "number",
-              "minimum": 0,
-              "description": "Оффсет с которого начинать выдачу",
-              "example": 100,
-              "default": 0
-            },
-            "required": false,
-            "in": "query"
+            "$ref": "#/components/parameters/Offset"
           },
           {
-            "name": "limit",
-            "schema": {
-              "type": "number",
-              "minimum": 1,
-              "description": "Лимит, ограничивающий кол-во возвращенных сущностей",
-              "example": 10,
-              "default": 10
-            },
-            "required": false,
-            "in": "query"
+            "$ref": "#/components/parameters/Limit"
           }
         ],
         "responses": {
@@ -494,16 +518,99 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Post"
-                  }
+                  "$ref": "#/components/schemas/PostFeed"
                 }
               }
             }
           },
           "400": {
             "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/post/list/{user_id}": {
+      "get": {
+        "operationId": "getUserPosts",
+        "description": "Посты конкретного пользователя, от новых к старым",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "required": true,
+            "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешно получены посты пользователя",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostFeed"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "500": {
+            "$ref": "#/components/responses/5xx"
+          },
+          "503": {
+            "$ref": "#/components/responses/5xx"
+          }
+        }
+      }
+    },
+    "/dialog/list": {
+      "get": {
+        "operationId": "getDialogList",
+        "description": "Список диалогов текущего пользователя. Возвращает собеседника и идентификатор диалога без превью последнего сообщения.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешно получен список диалогов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DialogSummary"
+                  }
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/401"
@@ -550,8 +657,22 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Успешно отправлено сообщение"
+          "201": {
+            "description": "Успешно отправлено сообщение",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Идентификатор созданного сообщения"
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/400"
@@ -570,6 +691,7 @@
     },
     "/dialog/{user_id}/list": {
       "get": {
+        "operationId": "getDialogMessages",
         "security": [
           {
             "bearerAuth": []
@@ -583,6 +705,12 @@
             },
             "required": true,
             "in": "path"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
           }
         ],
         "responses": {
@@ -591,10 +719,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/DialogMessage"
-                  }
+                  "$ref": "#/components/schemas/DialogMessageList"
                 }
               }
             }
@@ -616,6 +741,32 @@
     }
   },
   "components": {
+    "parameters": {
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Оффсет с которого начинать выдачу",
+          "example": 100,
+          "default": 0
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Лимит, ограничивающий кол-во возвращенных сущностей",
+          "example": 10,
+          "default": 10
+        }
+      }
+    },
     "responses": {
       "400": {
         "description": "Невалидные данные ввода"
@@ -727,8 +878,20 @@
           "to": {
             "$ref": "#/components/schemas/UserId"
           },
+          "dialog": {
+            "type": "string",
+            "description": "Идентификатор диалога"
+          },
           "text": {
             "$ref": "#/components/schemas/DialogMessageText"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -742,7 +905,67 @@
           "text": {
             "$ref": "#/components/schemas/PostText"
           },
-          "author_user_id": {
+          "created_by": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PostFeed": {
+        "type": "object",
+        "description": "Страница ленты постов",
+        "required": ["posts", "limit", "offset"],
+        "properties": {
+          "posts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Post"
+            }
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "DialogMessageList": {
+        "type": "object",
+        "description": "Страница сообщений диалога",
+        "required": ["messages", "limit", "offset"],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DialogMessage"
+            }
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "DialogSummary": {
+        "type": "object",
+        "description": "Диалог текущего пользователя с другим пользователем",
+        "required": ["dialog_id", "user_id"],
+        "properties": {
+          "dialog_id": {
+            "type": "string",
+            "description": "Идентификатор диалога"
+          },
+          "user_id": {
             "$ref": "#/components/schemas/UserId"
           }
         }

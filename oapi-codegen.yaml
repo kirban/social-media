@@ -3,4 +3,5 @@ generate:
   chi-server: true
   models: true
   embedded-spec: true
-output: internal/api/api.gen.go
+# The output path is passed with -o by the //go:generate directive in
+# internal/api/handlers.go, which runs from that package's directory.

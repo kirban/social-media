@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/kirban/social-media/internal/middleware"
 	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/service"
 )
@@ -14,25 +13,11 @@ const DefaultOffset = 0
 
 // (GET /post/feed)
 func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params GetPostFeedParams) {
-	var limit, offset int64
-
-	if params.Limit == nil {
-		limit = DefaultLimit
-	} else {
-		limit = int64(*params.Limit)
-	}
-
-	if params.Offset == nil {
-		offset = DefaultOffset
-	} else {
-		offset = int64(*params.Offset)
-	}
+	limit, offset := pageParams(params.Limit, params.Offset)
 
 	ctx := r.Context()
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	userID, ok := h.currentUser(w, r, "GetPostFeed")
 	if !ok {
-		h.Logger.Error().Msg("GetPostFeed: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -51,6 +36,28 @@ func (h *Handlers) GetPostFeed(w http.ResponseWriter, r *http.Request, params Ge
 
 }
 
+// (GET /post/list/{user_id})
+func (h *Handlers) GetUserPosts(w http.ResponseWriter, r *http.Request, userId UserId, params GetUserPostsParams) {
+	if !parseUUID(w, r, userId) {
+		return
+	}
+
+	limit, offset := pageParams(params.Limit, params.Offset)
+
+	posts, err := h.PostSvc.ListByCreator(r.Context(), userId, limit, offset)
+	if err != nil {
+		h.Logger.Error().Err(err).Msg("GetUserPosts: list posts by creator")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"posts":  posts,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
 // (POST /post/create)
 func (h *Handlers) PostPostCreate(w http.ResponseWriter, r *http.Request) {
 	body, ok := decodeBody[PostPostCreateJSONBody](w, r)
@@ -64,10 +71,8 @@ func (h *Handlers) PostPostCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	authorUserID, ok := ctx.Value(middleware.UserIDKey).(string)
+	authorUserID, ok := h.currentUser(w, r, "PostPostCreate")
 	if !ok {
-		h.Logger.Error().Msg("PostPostCreate: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -139,10 +144,8 @@ func (h *Handlers) PutPostDeleteId(w http.ResponseWriter, r *http.Request, id Po
 	}
 
 	ctx := r.Context()
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	userID, ok := h.currentUser(w, r, "PutPostDeleteId")
 	if !ok {
-		h.Logger.Error().Msg("PutPostDeleteId: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

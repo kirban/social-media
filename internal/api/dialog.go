@@ -2,29 +2,42 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/kirban/social-media/internal/middleware"
 )
 
+// (GET /dialog/list)
+func (h *Handlers) GetDialogList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.currentUser(w, r, "GetDialogList")
+	if !ok {
+		return
+	}
+
+	dialogs, err := h.DialogSvc.ListDialogs(r.Context(), userID)
+	if err != nil {
+		h.Logger.Error().Err(err).Msg("GetDialogList: failed to list dialogs")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dialogs)
+}
+
 // (GET /dialog/{user_id}/list)
-func (h *Handlers) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, dstUser UserId) {
+func (h *Handlers) GetDialogMessages(w http.ResponseWriter, r *http.Request, dstUser UserId, params GetDialogMessagesParams) {
 	if !parseUUID(w, r, dstUser) {
 		return
 	}
 
-	limit, offset := parsePageParams(r, DefaultLimit, DefaultOffset)
+	limit, offset := pageParams(params.Limit, params.Offset)
 
 	ctx := r.Context()
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	userID, ok := h.currentUser(w, r, "GetDialogMessages")
 	if !ok {
-		h.Logger.Error().Msg("GetDialogUserIdList: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	messages, err := h.DialogSvc.GetMessages(ctx, userID, dstUser, limit, offset)
 	if err != nil {
-		h.Logger.Error().Err(err).Msg("GetDialogUserIdList: failed to get dialog messages")
+		h.Logger.Error().Err(err).Msg("GetDialogMessages: failed to get dialog messages")
 		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -43,10 +56,8 @@ func (h *Handlers) PostDialogUserIdSend(w http.ResponseWriter, r *http.Request, 
 	}
 
 	ctx := r.Context()
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	userID, ok := h.currentUser(w, r, "PostDialogUserIdSend")
 	if !ok {
-		h.Logger.Error().Msg("PostDialogUserIdSend: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

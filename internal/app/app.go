@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -209,6 +210,20 @@ func (s *AppServer) initHTTPServer() error {
 	r.Use(appmiddleware.Logging(s.logger))
 	r.Use(chimiddleware.Recoverer)
 
+	// CORS must run before routing so preflight OPTIONS requests are answered
+	// even on paths that only register GET/POST/PUT. With no configured origins
+	// the middleware is skipped entirely, keeping same-origin deployments as
+	// they were.
+	if len(s.config.Server.CORSAllowedOrigins) > 0 {
+		r.Use(cors.Handler(cors.Options{
+			AllowedOrigins:   s.config.Server.CORSAllowedOrigins,
+			AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodOptions},
+			AllowedHeaders:   []string{"Authorization", "Content-Type"},
+			AllowCredentials: false,
+			MaxAge:           300,
+		}))
+	}
+
 	so := api.ChiServerOptions{
 		BaseRouter: r,
 		BaseURL:    "/api/v1",
@@ -236,6 +251,9 @@ func (s *AppServer) initHTTPServer() error {
 		})
 		r.Use(appmiddleware.Auth(s.config.Auth.JWTSecret, api.BearerAuthScopes))
 		// Async channel /post/feed/posted (AsyncAPI spec): friends' new-post feed.
+		// Served under /api/v1 alongside the REST routes; the unprefixed path is
+		// kept so existing clients keep working.
+		r.Get(so.BaseURL+"/post/feed/posted", s.hubs.feedPosted.ServeWS)
 		r.Get("/post/feed/posted", s.hubs.feedPosted.ServeWS)
 	})
 

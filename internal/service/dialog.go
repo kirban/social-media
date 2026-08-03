@@ -13,6 +13,7 @@ import (
 type DialogServiceInterface interface {
 	GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error)
 	SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error)
+	ListDialogs(ctx context.Context, srcUser model.UserID) ([]model.DialogSummary, error)
 }
 
 type DialogService struct {
@@ -42,6 +43,11 @@ func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.
 	}
 
 	return messages, nil
+}
+
+// ListDialogs returns the conversations srcUser takes part in.
+func (s *DialogService) ListDialogs(ctx context.Context, srcUser model.UserID) ([]model.DialogSummary, error) {
+	return s.repo.ListDialogs(ctx, srcUser)
 }
 
 func (s *DialogService) SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error) {

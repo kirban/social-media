@@ -31,3 +31,12 @@ type Dialog struct {
 type CreateDialogDTO struct {
 	Users [2]UserID
 }
+
+// DialogSummary is one entry in a user's conversation list: the other
+// participant and the dialog they share. It deliberately carries no last-message
+// preview — messages are sharded by dialog_id, so a preview would fan the query
+// out across shards, while participants live in a reference table.
+type DialogSummary struct {
+	DialogID DialogID `json:"dialog_id"`
+	UserID   UserID   `json:"user_id"`
+}

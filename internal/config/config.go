@@ -46,6 +46,11 @@ type ServerConfig struct {
 	// only. Bearer-token auth already blocks cross-site hijacking, so widen this
 	// only for legitimate cross-origin browser clients.
 	WSAllowedOrigins []string `yaml:"ws_allowed_origins" env:"WS_ALLOWED_ORIGINS"`
+	// CORSAllowedOrigins are full origins allowed to call the REST API from a
+	// browser (e.g. "http://localhost:5173"). Empty disables CORS entirely,
+	// which is correct when the frontend is served from the same origin or
+	// reached through a dev proxy.
+	CORSAllowedOrigins []string `yaml:"cors_allowed_origins" env:"CORS_ALLOWED_ORIGINS"`
 }
 
 // NATSConfig configures the JetStream broker used for feed fan-out. The stream

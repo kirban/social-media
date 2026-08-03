@@ -14,6 +14,7 @@ import (
 
 type PostsServiceInterface interface {
 	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
+	ListByCreator(ctx context.Context, creatorID string, limit, offset int64) ([]model.Post, error)
 	Create(ctx context.Context, dto *model.Post) (string, error)
 	GetByID(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
@@ -102,6 +103,13 @@ func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, err
 	}
 
 	return post.ID, nil
+}
+
+// ListByCreator returns one user's own posts. Unlike GetFeed this is read
+// straight from the repository: the feed cache is keyed per viewer, so it says
+// nothing about an individual author's posts.
+func (s *PostsService) ListByCreator(ctx context.Context, creatorID string, limit, offset int64) ([]model.Post, error) {
+	return s.repo.ListByCreator(ctx, creatorID, limit, offset)
 }
 
 func (s *PostsService) GetByID(ctx context.Context, id string) (*model.Post, error) {
