@@ -11,3 +11,16 @@ app_db:
 app_server:
   host: 0.0.0.0
   port: 8080
+  # Origins allowed to call the API and open a WebSocket directly from a
+  # browser. Not needed when the frontend is reached through the Vite dev
+  # proxy, which is same-origin; these cover hitting this backend directly.
+  cors_allowed_origins:
+    - http://localhost:5173
+  ws_allowed_origins:
+    - localhost:5173
+nats:
+  url: nats://sm-nats:4222
+  stream: POSTS
+  subject_prefix: posts
+  max_age: 10m
+  publish_retries: 3

@@ -10,6 +10,8 @@ services:
       - pgnet
     env_file:
       - .env
+    environment:
+      NATS_URL: nats://sm-nats:4222
     depends_on:
       sm-db-main:
         condition: service_healthy
@@ -17,6 +19,25 @@ services:
         condition: service_healthy
       sm-db-sl2:
         condition: service_healthy
+      sm-nats:
+        condition: service_healthy
+
+  sm-nats:
+    container_name: sm-nats
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    networks:
+      - pgnet
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - sm-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   sm-db-main:
     container_name: sm-db
@@ -159,3 +180,4 @@ volumes:
   sm-data-master:
   sm-data-sl1:
   sm-data-sl2:
+  sm-nats-data:

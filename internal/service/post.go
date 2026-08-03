@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"time"
 
 	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/logger"
@@ -14,34 +14,39 @@ import (
 
 type PostsServiceInterface interface {
 	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
+	ListByCreator(ctx context.Context, creatorID string, limit, offset int64) ([]model.Post, error)
 	Create(ctx context.Context, dto *model.Post) (string, error)
 	GetByID(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
 	Delete(ctx context.Context, id, userID string) error
 }
 
-type FollowerLister interface {
-	ListFollowers(ctx context.Context, userID string) ([]string, error)
+// EventPublisher publishes post events to the broker. Post-create/delete
+// fan-out (feed invalidation + WS notifications) happens asynchronously in a
+// consumer, decoupled from the request path. Satisfied by *broker.Publisher.
+type EventPublisher interface {
+	PublishPostCreated(ctx context.Context, e model.PostCreatedEvent) error
+	PublishPostDeleted(ctx context.Context, e model.PostDeletedEvent) error
 }
 
 type PostsService struct {
-	log     *logger.AppLogger
-	repo    *repository.PostRepository
-	cache   cache.Cache
-	friends FollowerLister
+	log       *logger.AppLogger
+	repo      *repository.PostRepository
+	cache     cache.Cache
+	publisher EventPublisher
 }
 
-func NewPostsService(repo *repository.PostRepository, c cache.Cache, f FollowerLister, log *logger.AppLogger) *PostsService {
+func NewPostsService(repo *repository.PostRepository, c cache.Cache, log *logger.AppLogger, pub EventPublisher) *PostsService {
 	return &PostsService{
-		repo:    repo,
-		cache:   c,
-		friends: f,
-		log:     log,
+		repo:      repo,
+		cache:     c,
+		log:       log,
+		publisher: pub,
 	}
 }
 
 func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error) {
-	cacheKey := fmt.Sprintf("user:%s:feed", userID)
+	cacheKey := model.FeedCacheKey(userID)
 
 	if data, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
 		var ids []string
@@ -77,12 +82,34 @@ func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset
 	return s.repo.GetByIDs(ctx, ids[start:end])
 }
 
+// Create persists the post, then publishes a post.created event. The broker
+// consumer performs the follower fan-out (cache invalidation + WS notify). A
+// publish failure is logged, not returned: the post is already committed, so
+// the request succeeds; the feed cache TTL heals any missed invalidation.
 func (s *PostsService) Create(ctx context.Context, dto *model.Post) (string, error) {
-	id, err := s.repo.Create(ctx, dto)
-	if err == nil {
-		go s.invalidateFeedForUser(context.WithoutCancel(ctx), dto.CreatorID)
+	post, err := s.repo.Create(ctx, dto)
+	if err != nil {
+		return "", err
 	}
-	return id, err
+
+	evt := model.PostCreatedEvent{
+		PostID:    post.ID,
+		AuthorID:  post.CreatorID,
+		Text:      post.Text,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.publisher.PublishPostCreated(ctx, evt); err != nil {
+		s.log.Error().Err(err).Str("postID", post.ID).Msg("create: publish post.created failed")
+	}
+
+	return post.ID, nil
+}
+
+// ListByCreator returns one user's own posts. Unlike GetFeed this is read
+// straight from the repository: the feed cache is keyed per viewer, so it says
+// nothing about an individual author's posts.
+func (s *PostsService) ListByCreator(ctx context.Context, creatorID string, limit, offset int64) ([]model.Post, error) {
+	return s.repo.ListByCreator(ctx, creatorID, limit, offset)
 }
 
 func (s *PostsService) GetByID(ctx context.Context, id string) (*model.Post, error) {
@@ -103,6 +130,8 @@ func (s *PostsService) Update(ctx context.Context, id string, post *model.Post) 
 	return nil
 }
 
+// Delete removes the post, then publishes a post.deleted event so every
+// instance invalidates the author's followers' cached feeds.
 func (s *PostsService) Delete(ctx context.Context, id, userID string) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -111,27 +140,10 @@ func (s *PostsService) Delete(ctx context.Context, id, userID string) error {
 		return err
 	}
 
-	go s.invalidateFeedForUser(context.WithoutCancel(ctx), userID)
-
-	return nil
-}
-
-func (s *PostsService) invalidateFeedForUser(ctx context.Context, userID string) error {
-	// get followers ids
-	followersIDs, err := s.friends.ListFollowers(ctx, userID)
-	if err != nil {
-		return err
+	evt := model.PostDeletedEvent{PostID: id, AuthorID: userID}
+	if err := s.publisher.PublishPostDeleted(ctx, evt); err != nil {
+		s.log.Error().Err(err).Str("postID", id).Msg("delete: publish post.deleted failed")
 	}
 
-	// delete cached feed entries
-	for _, followerID := range followersIDs {
-		cacheKey := fmt.Sprintf("user:%s:feed", followerID)
-		err := s.cache.Delete(ctx, cacheKey)
-		if err != nil {
-			msg := fmt.Sprintf("failed to invalidate user feed(%s). deleting key %s", userID, cacheKey)
-			s.log.Error().Err(err).Msg(msg)
-			continue
-		}
-	}
 	return nil
 }

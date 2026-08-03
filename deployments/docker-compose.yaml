@@ -8,9 +8,28 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      NATS_URL: nats://sm-nats:4222
     depends_on:
       sm-db:
         condition: service_healthy
+      sm-nats:
+        condition: service_healthy
+
+  sm-nats:
+    container_name: sm-nats
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - sm-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   sm-db:
     container_name: sm-db
@@ -32,3 +51,4 @@ services:
       retries: 10
 volumes:
   sm-data:
+  sm-nats-data:

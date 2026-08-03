@@ -3,9 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
+
+	"github.com/kirban/social-media/internal/middleware"
 )
 
 func decodeBody[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
@@ -36,6 +37,19 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(buf)
 }
 
+// currentUser returns the authenticated user ID that the auth middleware placed
+// in the context. A miss means a protected route was mounted without that
+// middleware — a wiring bug, not a client error — so it reports 500.
+func (h *Handlers) currentUser(w http.ResponseWriter, r *http.Request, op string) (string, bool) {
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	if !ok || userID == "" {
+		h.Logger.Error().Msgf("%s: failed to parse UserIDKey", op)
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return "", false
+	}
+	return userID, true
+}
+
 func strOrEmpty(s *string) string {
 	if s == nil {
 		return ""
@@ -43,19 +57,16 @@ func strOrEmpty(s *string) string {
 	return *s
 }
 
-func parsePageParams(r *http.Request, defaultLimit, defaultOffset int64) (limit, offset int64) {
-	limit = defaultLimit
-	offset = defaultOffset
-	q := r.URL.Query()
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
-			limit = n
-		}
+// pageParams resolves the generated limit/offset query params, falling back to
+// the defaults when absent or out of range. They arrive as *float32 because the
+// spec types them as `number`; every paginated handler shares this conversion.
+func pageParams(limit *Limit, offset *Offset) (int64, int64) {
+	l, o := int64(DefaultLimit), int64(DefaultOffset)
+	if limit != nil && *limit > 0 {
+		l = int64(*limit)
 	}
-	if v := q.Get("offset"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
-			offset = n
-		}
+	if offset != nil && *offset >= 0 {
+		o = int64(*offset)
 	}
-	return
+	return l, o
 }

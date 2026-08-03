@@ -13,11 +13,12 @@ import (
 )
 
 type PostRepositoryInterface interface {
-	Create(ctx context.Context, post *model.Post) (string, error)
+	Create(ctx context.Context, post *model.Post) (*model.Post, error)
 	GetByID(ctx context.Context, id string) (*model.Post, error)
 	Update(ctx context.Context, id string, post *model.Post) error
 	Delete(ctx context.Context, id string) error
 	GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error)
+	ListByCreator(ctx context.Context, creatorID string, limit, offset int64) ([]model.Post, error)
 	GetFeedIDs(ctx context.Context, userID string, limit int64) ([]string, error)
 	GetByIDs(ctx context.Context, ids []string) ([]model.Post, error)
 }
@@ -31,13 +32,21 @@ func NewPostRepository(cluster *db.Cluster, logger *logger.AppLogger) *PostRepos
 	return &PostRepository{cluster: cluster, log: logger}
 }
 
-func (r *PostRepository) Create(ctx context.Context, p *model.Post) (string, error) {
-	var id string
+func (r *PostRepository) Create(ctx context.Context, p *model.Post) (*model.Post, error) {
+	var id, creator, text string
 	err := r.cluster.Master().QueryRowContext(ctx, `
 		INSERT INTO posts (text, creator_id) VALUES ($1, $2)
-		RETURNING id
-	`, p.Text, p.CreatorID).Scan(&id)
-	return id, err
+		RETURNING id, creator_id, text
+	`, p.Text, p.CreatorID).Scan(&id, &creator, &text)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.Post{
+		ID:        id,
+		Text:      text,
+		CreatorID: creator,
+	}, err
 }
 
 func (r *PostRepository) GetByID(ctx context.Context, id string) (*model.Post, error) {
@@ -121,6 +130,42 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, limit, offs
 	}
 
 	return feed, nil
+}
+
+// ListByCreator returns one user's own posts, newest first. Served by the
+// idx_posts_creator_created index.
+func (r *PostRepository) ListByCreator(ctx context.Context, creatorID string, limit, offset int64) ([]model.Post, error) {
+	rows, err := r.cluster.Replica().QueryContext(ctx, `
+		SELECT id, text, creator_id, created_at, updated_at
+		FROM posts
+		WHERE creator_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+		OFFSET $3
+	`, creatorID, limit, offset)
+	if err != nil {
+		r.log.Error().Err(err).Msg("posts by creator: during sql request")
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := make([]model.Post, 0)
+
+	for rows.Next() {
+		var post model.Post
+		if err := rows.Scan(&post.ID, &post.Text, &post.CreatorID, &post.CreatedAt, &post.UpdatedAt); err != nil {
+			r.log.Error().Err(err).Msg("posts by creator: during rows scan")
+			return nil, err
+		}
+		posts = append(posts, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.log.Error().Err(err).Msg("posts by creator: after rows scan")
+		return nil, err
+	}
+
+	return posts, nil
 }
 
 // GetFeedIDs returns feed ids only slice created_at desc (used to set in cache)

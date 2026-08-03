@@ -2,9 +2,25 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/kirban/social-media/internal/middleware"
 )
+
+// (GET /friend/list)
+func (h *Handlers) GetFriendList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	currentUserID, ok := h.currentUser(w, r, "GetFriendList")
+	if !ok {
+		return
+	}
+
+	friends, err := h.FriendsSvc.ListFriends(ctx, currentUserID)
+	if err != nil {
+		h.Logger.Error().Err(err).Msg("GetFriendList: list friends")
+		writeError(w, r, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, friends)
+}
 
 // (PUT /friend/set/{user_id})
 func (h *Handlers) PutFriendSetUserId(w http.ResponseWriter, r *http.Request, userId UserId) {
@@ -13,10 +29,8 @@ func (h *Handlers) PutFriendSetUserId(w http.ResponseWriter, r *http.Request, us
 	}
 
 	ctx := r.Context()
-	currentUserID, ok := ctx.Value(middleware.UserIDKey).(string)
+	currentUserID, ok := h.currentUser(w, r, "PutFriendSetUserId")
 	if !ok {
-		h.Logger.Error().Msg("PutFriendSetUserId: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -36,10 +50,8 @@ func (h *Handlers) PutFriendDeleteUserId(w http.ResponseWriter, r *http.Request,
 	}
 
 	ctx := r.Context()
-	currentUserID, ok := ctx.Value(middleware.UserIDKey).(string)
+	currentUserID, ok := h.currentUser(w, r, "PutFriendDeleteUserId")
 	if !ok {
-		h.Logger.Error().Msg("PutFriendDeleteUserId: failed to parse UserIDKey")
-		writeError(w, r, http.StatusInternalServerError, "internal server error")
 		return
 	}
 

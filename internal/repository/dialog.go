@@ -20,7 +20,7 @@ type DialogRepositoryInterface interface {
 	GetByID(ctx context.Context, id model.DialogID) (*model.Dialog, error)
 	Update(ctx context.Context) error
 	Delete(ctx context.Context) error
-	ListDialogs(ctx context.Context, userID model.UserID) ([]model.Dialog, error)
+	ListDialogs(ctx context.Context, userID model.UserID) ([]model.DialogSummary, error)
 }
 
 type DialogRepository struct {
@@ -94,6 +94,43 @@ func (r *DialogRepository) ListMessages(ctx context.Context, dialogID *model.Dia
 	}
 
 	return messages, nil
+}
+
+// ListDialogs returns every dialog userID participates in, paired with the other
+// participant.
+//
+// The self-join stays on dialog_user, which Citus replicates as a reference
+// table, so this resolves locally. Deriving the same list from dialog_message
+// (e.g. SELECT DISTINCT "to") would scatter-gather across all 32 shards with no
+// usable index.
+func (r *DialogRepository) ListDialogs(ctx context.Context, userID model.UserID) ([]model.DialogSummary, error) {
+	rows, err := r.cluster.Replica().QueryContext(ctx, `
+		SELECT peer.dialog_id, peer.user_id
+		FROM "dialog_user" mine
+		JOIN "dialog_user" peer
+			ON peer.dialog_id = mine.dialog_id
+			AND peer.user_id <> mine.user_id
+		WHERE mine.user_id = $1
+		ORDER BY peer.dialog_id;
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list dialogs: %w", err)
+	}
+	defer rows.Close()
+
+	dialogs := make([]model.DialogSummary, 0)
+	for rows.Next() {
+		var d model.DialogSummary
+		if err := rows.Scan(&d.DialogID, &d.UserID); err != nil {
+			return nil, fmt.Errorf("failed to scan dialog: %w", err)
+		}
+		dialogs = append(dialogs, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate dialogs: %w", err)
+	}
+
+	return dialogs, nil
 }
 
 func (r *DialogRepository) CreateDialog(ctx context.Context, dto *model.CreateDialogDTO) (*model.DialogID, error) {

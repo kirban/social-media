@@ -6,6 +6,7 @@ import (
 
 	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/logger"
+	"github.com/kirban/social-media/internal/model"
 	"github.com/kirban/social-media/internal/repository"
 )
 
@@ -41,6 +42,11 @@ func (s *FriendsService) DeleteFriend(ctx context.Context, userID, friendID stri
 
 func (s *FriendsService) ListFollowers(ctx context.Context, userID string) ([]string, error) {
 	return s.repo.ListFollowerIDs(ctx, userID)
+}
+
+// ListFriends returns the users userID follows, whose posts feed their timeline.
+func (s *FriendsService) ListFriends(ctx context.Context, userID string) ([]model.User, error) {
+	return s.repo.ListFriends(ctx, userID)
 }
 
 func (s *FriendsService) invalidateFeed(ctx context.Context, userID string) {

@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
@@ -30,6 +31,11 @@ type BirthDate = openapi_types.Date
 
 // DialogMessage defines model for DialogMessage.
 type DialogMessage struct {
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// Dialog Идентификатор диалога
+	Dialog *string `json:"dialog,omitempty"`
+
 	// From Идентификатор пользователя
 	From UserId `json:"from"`
 
@@ -37,22 +43,49 @@ type DialogMessage struct {
 	Text DialogMessageText `json:"text"`
 
 	// To Идентификатор пользователя
-	To UserId `json:"to"`
+	To        UserId     `json:"to"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// DialogMessageList Страница сообщений диалога
+type DialogMessageList struct {
+	Limit    int             `json:"limit"`
+	Messages []DialogMessage `json:"messages"`
+	Offset   int             `json:"offset"`
 }
 
 // DialogMessageText Текст сообщения
 type DialogMessageText = string
 
+// DialogSummary Диалог текущего пользователя с другим пользователем
+type DialogSummary struct {
+	// DialogId Идентификатор диалога
+	DialogId string `json:"dialog_id"`
+
+	// UserId Идентификатор пользователя
+	UserId UserId `json:"user_id"`
+}
+
 // Post Пост пользователя
 type Post struct {
-	// AuthorUserId Идентификатор пользователя
-	AuthorUserId *UserId `json:"author_user_id,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// CreatedBy Идентификатор пользователя
+	CreatedBy *UserId `json:"created_by,omitempty"`
 
 	// Id Идентификатор поста
 	Id *PostId `json:"id,omitempty"`
 
 	// Text Текст поста
-	Text *PostText `json:"text,omitempty"`
+	Text      *PostText  `json:"text,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// PostFeed Страница ленты постов
+type PostFeed struct {
+	Limit  int    `json:"limit"`
+	Offset int    `json:"offset"`
+	Posts  []Post `json:"posts"`
 }
 
 // PostId Идентификатор поста
@@ -85,6 +118,12 @@ type User struct {
 // UserId Идентификатор пользователя
 type UserId = string
 
+// Limit Лимит, ограничивающий кол-во возвращенных сущностей
+type Limit = float32
+
+// Offset Оффсет с которого начинать выдачу
+type Offset = float32
+
 // N5xx defines model for 5xx.
 type N5xx struct {
 	// Code Код ошибки. Предназначен для классификации проблем и более быстрого решения проблем.
@@ -99,6 +138,12 @@ type N5xx struct {
 
 // bearerAuthContextKey is the context key for bearerAuth security scheme
 type bearerAuthContextKey string
+
+// GetDialogMessagesParams defines parameters for GetDialogMessages.
+type GetDialogMessagesParams struct {
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // PostDialogUserIdSendJSONBody defines parameters for PostDialogUserIdSend.
 type PostDialogUserIdSendJSONBody struct {
@@ -121,8 +166,14 @@ type PostPostCreateJSONBody struct {
 
 // GetPostFeedParams defines parameters for GetPostFeed.
 type GetPostFeedParams struct {
-	Offset *float32 `form:"offset,omitempty" json:"offset,omitempty"`
-	Limit  *float32 `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetUserPostsParams defines parameters for GetUserPosts.
+type GetUserPostsParams struct {
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // PutPostUpdateJSONBody defines parameters for PutPostUpdate.
@@ -173,14 +224,20 @@ type PostUserRegisterJSONRequestBody PostUserRegisterJSONBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /dialog/list)
+	GetDialogList(w http.ResponseWriter, r *http.Request)
+
 	// (GET /dialog/{user_id}/list)
-	GetDialogUserIdList(w http.ResponseWriter, r *http.Request, userId UserId)
+	GetDialogMessages(w http.ResponseWriter, r *http.Request, userId UserId, params GetDialogMessagesParams)
 
 	// (POST /dialog/{user_id}/send)
 	PostDialogUserIdSend(w http.ResponseWriter, r *http.Request, userId UserId)
 
 	// (PUT /friend/delete/{user_id})
 	PutFriendDeleteUserId(w http.ResponseWriter, r *http.Request, userId UserId)
+
+	// (GET /friend/list)
+	GetFriendList(w http.ResponseWriter, r *http.Request)
 
 	// (PUT /friend/set/{user_id})
 	PutFriendSetUserId(w http.ResponseWriter, r *http.Request, userId UserId)
@@ -200,6 +257,9 @@ type ServerInterface interface {
 	// (GET /post/get/{id})
 	GetPostGetId(w http.ResponseWriter, r *http.Request, id PostId)
 
+	// (GET /post/list/{user_id})
+	GetUserPosts(w http.ResponseWriter, r *http.Request, userId UserId, params GetUserPostsParams)
+
 	// (PUT /post/update)
 	PutPostUpdate(w http.ResponseWriter, r *http.Request)
 
@@ -217,8 +277,13 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// (GET /dialog/list)
+func (_ Unimplemented) GetDialogList(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /dialog/{user_id}/list)
-func (_ Unimplemented) GetDialogUserIdList(w http.ResponseWriter, r *http.Request, userId UserId) {
+func (_ Unimplemented) GetDialogMessages(w http.ResponseWriter, r *http.Request, userId UserId, params GetDialogMessagesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -229,6 +294,11 @@ func (_ Unimplemented) PostDialogUserIdSend(w http.ResponseWriter, r *http.Reque
 
 // (PUT /friend/delete/{user_id})
 func (_ Unimplemented) PutFriendDeleteUserId(w http.ResponseWriter, r *http.Request, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /friend/list)
+func (_ Unimplemented) GetFriendList(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -262,6 +332,11 @@ func (_ Unimplemented) GetPostGetId(w http.ResponseWriter, r *http.Request, id P
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /post/list/{user_id})
+func (_ Unimplemented) GetUserPosts(w http.ResponseWriter, r *http.Request, userId UserId, params GetUserPostsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (PUT /post/update)
 func (_ Unimplemented) PutPostUpdate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -291,8 +366,28 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetDialogUserIdList operation middleware
-func (siw *ServerInterfaceWrapper) GetDialogUserIdList(w http.ResponseWriter, r *http.Request) {
+// GetDialogList operation middleware
+func (siw *ServerInterfaceWrapper) GetDialogList(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDialogList(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDialogMessages operation middleware
+func (siw *ServerInterfaceWrapper) GetDialogMessages(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -312,8 +407,37 @@ func (siw *ServerInterfaceWrapper) GetDialogUserIdList(w http.ResponseWriter, r 
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDialogMessagesParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetDialogUserIdList(w, r, userId)
+		siw.Handler.GetDialogMessages(w, r, userId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -378,6 +502,26 @@ func (siw *ServerInterfaceWrapper) PutFriendDeleteUserId(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutFriendDeleteUserId(w, r, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFriendList operation middleware
+func (siw *ServerInterfaceWrapper) GetFriendList(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFriendList(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -554,6 +698,67 @@ func (siw *ServerInterfaceWrapper) GetPostGetId(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPostGetId(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUserPosts operation middleware
+func (siw *ServerInterfaceWrapper) GetUserPosts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "user_id" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "user_id", chi.URLParam(r, "user_id"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "user_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetUserPostsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "number", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUserPosts(w, r, userId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -783,13 +988,19 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/dialog/{user_id}/list", wrapper.GetDialogUserIdList)
+		r.Get(options.BaseURL+"/dialog/list", wrapper.GetDialogList)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/dialog/{user_id}/list", wrapper.GetDialogMessages)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/dialog/{user_id}/send", wrapper.PostDialogUserIdSend)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/friend/delete/{user_id}", wrapper.PutFriendDeleteUserId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/friend/list", wrapper.GetFriendList)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/friend/set/{user_id}", wrapper.PutFriendSetUserId)
@@ -808,6 +1019,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/post/get/{id}", wrapper.GetPostGetId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/post/list/{user_id}", wrapper.GetUserPosts)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/post/update", wrapper.PutPostUpdate)
@@ -830,45 +1044,53 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"cjEOzBspvzeWeZ3O/wIAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
