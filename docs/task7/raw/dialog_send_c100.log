@@ -1,0 +1,51 @@
+# route:       dialog_send
+# concurrency: 100
+# duration:    30s
+# command:     hey -z 30s -c 100 -m POST -H Authorization: Bearer <JWT> -T application/json -d {"text":"load test message"} http://localhost:8282/api/v1/dialog/092d4acd-81d9-444b-b4c1-79e927591060/send
+
+
+Summary:
+  Total:	30.0162 secs
+  Slowest:	0.0951 secs
+  Fastest:	0.0020 secs
+  Average:	0.0108 secs
+  Requests/sec:	9238.5797
+  
+  Total data:	12478815 bytes
+  Size/request:	45 bytes
+
+Response time histogram:
+  0.002 [1]	|
+  0.011 [181288]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.021 [71381]	|■■■■■■■■■■■■■■■■
+  0.030 [18106]	|■■■■
+  0.039 [4766]	|■
+  0.049 [1266]	|
+  0.058 [354]	|
+  0.067 [96]	|
+  0.076 [29]	|
+  0.086 [14]	|
+  0.095 [6]	|
+
+
+Latency distribution:
+  10%% in 0.0046 secs
+  25%% in 0.0059 secs
+  50%% in 0.0087 secs
+  75%% in 0.0135 secs
+  90%% in 0.0198 secs
+  95%% in 0.0245 secs
+  99%% in 0.0360 secs
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0110 secs
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0023 secs
+  req write:	0.0000 secs, 0.0000 secs, 0.0004 secs
+  resp wait:	0.0108 secs, 0.0019 secs, 0.0950 secs
+  resp read:	0.0000 secs, 0.0000 secs, 0.0005 secs
+
+Status code distribution:
+  [201]	277307 responses
+
+
+

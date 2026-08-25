@@ -1,0 +1,49 @@
+# route:       dialog_messages
+# concurrency: 100
+# duration:    30s
+# command:     hey -z 30s -c 100 -H Authorization: Bearer <JWT> http://localhost:8282/api/v1/dialog/092d4acd-81d9-444b-b4c1-79e927591060/list?limit=100&offset=0
+
+
+Summary:
+  Total:	30.0116 secs
+  Slowest:	0.0986 secs
+  Fastest:	0.0007 secs
+  Average:	0.0156 secs
+  Requests/sec:	6392.0039
+  
+
+Response time histogram:
+  0.001 [1]	|
+  0.011 [58843]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.020 [85632]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.030 [35352]	|■■■■■■■■■■■■■■■■■
+  0.040 [9555]	|■■■■
+  0.050 [2018]	|■
+  0.059 [355]	|
+  0.069 [61]	|
+  0.079 [13]	|
+  0.089 [3]	|
+  0.099 [1]	|
+
+
+Latency distribution:
+  10%% in 0.0056 secs
+  25%% in 0.0090 secs
+  50%% in 0.0148 secs
+  75%% in 0.0202 secs
+  90%% in 0.0270 secs
+  95%% in 0.0315 secs
+  99%% in 0.0413 secs
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0120 secs
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0021 secs
+  req write:	0.0000 secs, 0.0000 secs, 0.0003 secs
+  resp wait:	0.0151 secs, 0.0007 secs, 0.0915 secs
+  resp read:	0.0006 secs, 0.0000 secs, 0.0280 secs
+
+Status code distribution:
+  [200]	191834 responses
+
+
+
