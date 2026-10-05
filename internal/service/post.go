@@ -48,7 +48,7 @@ func NewPostsService(repo *repository.PostRepository, c cache.Cache, log *logger
 func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error) {
 	cacheKey := model.FeedCacheKey(userID)
 
-	if data, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
+	if data, err := s.cache.Get(ctx, cacheKey); err == nil {
 		var ids []string
 		if err := json.Unmarshal(data, &ids); err == nil {
 			start := int(offset)

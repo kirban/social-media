@@ -14,50 +14,53 @@ type entry struct {
 	expiresAt time.Time
 }
 
-type MemoryCache struct {
-	mu      sync.RWMutex
-	entries map[string]entry
-	stop    chan struct{}
+type InMemoryCache struct {
+	mu        sync.RWMutex
+	entries   map[string]entry
+	stop      chan struct{}
+	closeOnce *sync.Once
 }
 
-func NewMemoryCache() *MemoryCache {
-	c := &MemoryCache{
-		entries: make(map[string]entry),
-		stop:    make(chan struct{}),
+func NewInMemoryCache() *InMemoryCache {
+	c := &InMemoryCache{
+		entries:   make(map[string]entry),
+		stop:      make(chan struct{}),
+		closeOnce: &sync.Once{},
 	}
 	go c.cleanup(defaultCleanupInterval)
 	return c
 }
 
-func (c *MemoryCache) Stop() {
-	close(c.stop)
+func (c *InMemoryCache) Stop(ctx context.Context) error {
+	c.closeOnce.Do(func() { close(c.stop) })
+	return nil
 }
 
-func (c *MemoryCache) Get(_ context.Context, key string) ([]byte, bool, error) {
+func (c *InMemoryCache) Get(_ context.Context, key string) ([]byte, error) {
 	c.mu.RLock()
 	e, ok := c.entries[key]
 	c.mu.RUnlock()
 	if !ok || time.Now().After(e.expiresAt) {
-		return nil, false, nil
+		return nil, nil
 	}
-	return e.value, true, nil
+	return e.value, nil
 }
 
-func (c *MemoryCache) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *InMemoryCache) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	c.mu.Lock()
 	c.entries[key] = entry{value: value, expiresAt: time.Now().Add(ttl)}
 	c.mu.Unlock()
 	return nil
 }
 
-func (c *MemoryCache) Delete(_ context.Context, key string) error {
+func (c *InMemoryCache) Delete(_ context.Context, key string) error {
 	c.mu.Lock()
 	delete(c.entries, key)
 	c.mu.Unlock()
 	return nil
 }
 
-func (c *MemoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
+func (c *InMemoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
 	c.mu.Lock()
 	for k := range c.entries {
 		if strings.HasPrefix(k, prefix) {
@@ -68,7 +71,7 @@ func (c *MemoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
 	return nil
 }
 
-func (c *MemoryCache) cleanup(interval time.Duration) {
+func (c *InMemoryCache) cleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {

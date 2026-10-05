@@ -8,10 +8,13 @@ services:
       - "8282:8080"
     networks:
       - pgnet
+      - sm-redis-net
     env_file:
       - .env
     environment:
       NATS_URL: nats://sm-nats:4222
+      # config.CacheConfig.Addrs is env-required, so this must be set.
+      CACHE_ADDRESSES: sm-redis-node-1:6379,sm-redis-node-2:6379,sm-redis-node-3:6379
     depends_on:
       sm-db-main:
         condition: service_healthy
@@ -21,6 +24,8 @@ services:
         condition: service_healthy
       sm-nats:
         condition: service_healthy
+      sm-redis-cluster-init:
+        condition: service_completed_successfully
 
   sm-nats:
     container_name: sm-nats
@@ -171,11 +176,88 @@ services:
         chown -R 999:999 /var/lib/postgresql
         exec gosu postgres postgres \
          -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl2'
-  sm-redis:
-    container_name: sm-redis
+  # Three masters, no replicas. Each node gets its own volume so nodes.conf
+  # (its cluster identity) survives a restart.
+  sm-redis-node-1: &redis-node
+    container_name: sm-redis-node-1
     image: redis:8.10
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-1:/data
+    networks:
+      - sm-redis-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+  sm-redis-node-2:
+    <<: *redis-node
+    container_name: sm-redis-node-2
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-2:/data
+  sm-redis-node-3:
+    <<: *redis-node
+    container_name: sm-redis-node-3
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-3:/data
+
+  # One-shot: forms the cluster, then loads the Lua library into every master.
+  # Idempotent — safe to re-run against an already-formed cluster.
+  sm-redis-cluster-init:
+    container_name: sm-redis-cluster-init
+    image: redis:8.10
+    restart: "no"
+    volumes:
+      - ./scripts/udf:/udf:ro
+    networks:
+      - sm-redis-net
+    depends_on:
+      sm-redis-node-1:
+        condition: service_healthy
+      sm-redis-node-2:
+        condition: service_healthy
+      sm-redis-node-3:
+        condition: service_healthy
+    # The script must be a single list element: a string `command:` would be
+    # word-split by Compose and arrive as separate argv entries.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+
+        NODES="sm-redis-node-1 sm-redis-node-2 sm-redis-node-3"
+        ADDRS=""
+        for n in $$NODES; do ADDRS="$$ADDRS $$n:6379"; done
+
+        state=$$(redis-cli -h sm-redis-node-1 cluster info | tr -d '\r' \
+                 | awk -F: '/^cluster_state:/ {print $$2}')
+        if [ "$$state" = "ok" ]; then
+          echo "Кластер уже сформирован, пропускаем create."
+        else
+          echo "Инициализация Redis Cluster..."
+          redis-cli --cluster create $$ADDRS --cluster-replicas 0 --cluster-yes
+        fi
+
+        # FUNCTION LOAD is node-local and there are no replicas to propagate
+        # to, so the library must be pushed to each master individually.
+        echo "Загрузка UDF функций во все мастер-ноды кластера..."
+        for n in $$NODES; do
+          redis-cli -h "$$n" -x FUNCTION LOAD REPLACE < /udf/udf.lua
+          echo "  $$n -> $$(redis-cli -h "$$n" FUNCTION LIST | tr '\n' ' ')"
+        done
+
+        echo "Кластер успешно настроен!"
+
 networks:
   pgnet:
+    driver: bridge
+  sm-redis-net:
     driver: bridge
 
 volumes:
@@ -183,3 +265,6 @@ volumes:
   sm-data-sl1:
   sm-data-sl2:
   sm-nats-data:
+  sm-redis-1:
+  sm-redis-2:
+  sm-redis-3:
