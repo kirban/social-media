@@ -161,12 +161,17 @@ func (s *AppServer) initCache() error {
 	case "", "inmem":
 		s.cache = cache.NewInMemoryCache()
 	case "redis":
+		if len(s.config.Cache.Addrs) == 0 {
+			return fmt.Errorf("cache driver %q requires CACHE_ADDRESSES", s.config.Cache.Driver)
+		}
 		c := cache.NewRedisCache(s.config.Cache)
 		ctx, cancel := context.WithTimeout(context.Background(), s.config.Cache.DialTimeout)
 		defer cancel()
 		if err := c.Ping(ctx); err != nil {
-			return s.logger.Error().GetCtx().Err()
+			return fmt.Errorf("connect redis cluster: %w", err)
 		}
+		s.logger.Info().Strs("addrs", s.config.Cache.Addrs).Msg("connected to Redis cluster")
+		s.cache = c
 	default:
 		return fmt.Errorf("unknown cache driver %q", s.config.Cache.Driver)
 	}
@@ -211,7 +216,7 @@ func (s *AppServer) initServices() error {
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
 		post:    service.NewPostsService(s.repos.post, s.cache, s.logger, s.publisher),
 		friends: friendsSvc,
-		dialog:  service.NewDialogService(s.logger, s.repos.dialog),
+		dialog:  service.NewDialogService(s.logger, s.repos.dialog, s.cache),
 	}
 
 	fanout := broker.NewFeedFanout(friendsSvc, s.cache, s.hubs.feedPosted, s.logger)

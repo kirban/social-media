@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/logger"
 	"github.com/kirban/social-media/internal/model"
 )
@@ -33,9 +34,18 @@ type fakeCache struct {
 	deleted []string
 }
 
-func (c *fakeCache) Get(context.Context, string) ([]byte, error)              { return nil, nil }
+func (c *fakeCache) Get(context.Context, string) ([]byte, error) {
+	return nil, cache.ErrCacheMiss
+}
 func (c *fakeCache) Set(context.Context, string, []byte, time.Duration) error { return nil }
 func (c *fakeCache) DeleteByPrefix(context.Context, string) error             { return nil }
+func (c *fakeCache) GetList(context.Context, string) ([][]byte, error) {
+	return nil, cache.ErrCacheMiss
+}
+func (c *fakeCache) SetList(context.Context, string, [][]byte, time.Duration) error { return nil }
+func (c *fakeCache) AppendIfWarm(context.Context, string, []byte, int, time.Duration) (bool, error) {
+	return false, nil
+}
 func (c *fakeCache) Delete(_ context.Context, key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

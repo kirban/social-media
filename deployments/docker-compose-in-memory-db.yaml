@@ -13,7 +13,7 @@ services:
       - .env
     environment:
       NATS_URL: nats://sm-nats:4222
-      # config.CacheConfig.Addrs is env-required, so this must be set.
+      CACHE_DRIVER: redis
       CACHE_ADDRESSES: sm-redis-node-1:6379,sm-redis-node-2:6379,sm-redis-node-3:6379
     depends_on:
       sm-db-main:
@@ -182,7 +182,9 @@ services:
     container_name: sm-redis-node-1
     image: redis:8.10
     restart: unless-stopped
-    command: redis-server /usr/local/etc/redis/redis.conf
+    # The hostname is per-node, so it is an override rather than part of the
+    # shared redis.conf.
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis-node-1
     volumes:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
       - sm-redis-1:/data
@@ -196,12 +198,14 @@ services:
   sm-redis-node-2:
     <<: *redis-node
     container_name: sm-redis-node-2
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis-node-2
     volumes:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
       - sm-redis-2:/data
   sm-redis-node-3:
     <<: *redis-node
     container_name: sm-redis-node-3
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis-node-3
     volumes:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
       - sm-redis-3:/data

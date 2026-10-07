@@ -48,7 +48,13 @@ func NewPostsService(repo *repository.PostRepository, c cache.Cache, log *logger
 func (s *PostsService) GetFeed(ctx context.Context, userID string, limit, offset int64) ([]model.Post, error) {
 	cacheKey := model.FeedCacheKey(userID)
 
-	if data, err := s.cache.Get(ctx, cacheKey); err == nil {
+	data, err := s.cache.Get(ctx, cacheKey)
+	if err != nil && !errors.Is(err, cache.ErrCacheMiss) {
+		// A cold cache and a broken cache both fall through to the repository,
+		// but only one of them is worth knowing about.
+		s.log.Error().Err(err).Str("key", cacheKey).Msg("feed cache read failed")
+	}
+	if err == nil {
 		var ids []string
 		if err := json.Unmarshal(data, &ids); err == nil {
 			start := int(offset)
