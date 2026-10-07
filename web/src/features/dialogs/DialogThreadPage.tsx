@@ -38,7 +38,10 @@ export function DialogThreadPage() {
     refetchInterval: 5000,
   })
 
-  const messages = thread.data?.messages ?? []
+  // The API returns the newest messages first (offset 0 is the end of the
+  // history, which is what the cached page holds). The thread renders oldest
+  // at the top, so the page is reversed for display.
+  const messages = [...(thread.data?.messages ?? [])].reverse()
 
   const send = useMutation({
     mutationFn: (text: string) => dialogsApi.send(userId!, text),
