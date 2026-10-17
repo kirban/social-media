@@ -12,7 +12,7 @@ import (
 )
 
 type DialogRepositoryInterface interface {
-	CreateMessage(ctx context.Context, dialogID *model.DialogID, from, to model.UserID, text string) (*model.DialogMessageID, error)
+	CreateMessage(ctx context.Context, dialogID *model.DialogID, from, to model.UserID, text string) (*model.DialogMessage, error)
 	GetDialogID(ctx context.Context, srcUser, dstUser model.UserID) (*model.DialogID, error)
 	ListMessages(ctx context.Context, dialogID *model.DialogID, limit, offset int64) ([]model.DialogMessage, error)
 	CreateDialog(ctx context.Context, dto *model.CreateDialogDTO) (*model.DialogID, error)
@@ -35,16 +35,27 @@ func NewDialogRepository(c *db.Cluster, l *logger.AppLogger) *DialogRepository {
 	}
 }
 
-func (r *DialogRepository) CreateMessage(ctx context.Context, dialogID *model.DialogID, from, to model.UserID, text string) (*model.DialogMessageID, error) {
-	var messID model.DialogMessageID
+// CreateMessage inserts a message and returns it as stored.
+//
+// created_at/updated_at come back from the insert rather than being assumed by
+// the caller: the cached page carries these timestamps, and a value guessed
+// with time.Now() would differ from the row and appear to change once the page
+// expires.
+func (r *DialogRepository) CreateMessage(ctx context.Context, dialogID *model.DialogID, from, to model.UserID, text string) (*model.DialogMessage, error) {
+	msg := model.DialogMessage{
+		From:     from,
+		To:       to,
+		DialogID: *dialogID,
+		Text:     text,
+	}
 	err := r.cluster.Master().QueryRowContext(ctx, `INSERT INTO "dialog_message" ("dialog_id", "from", "to", "text")
 		VALUES ($1, $2, $3, $4)
-		RETURNING id;
-	`, dialogID, from, to, text).Scan(&messID)
+		RETURNING id, created_at, updated_at;
+	`, dialogID, from, to, text).Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed create message: %w", err)
 	}
-	return &messID, nil
+	return &msg, nil
 }
 
 func (r *DialogRepository) GetDialogID(ctx context.Context, srcUser, dstUser model.UserID) (*model.DialogID, error) {
@@ -67,12 +78,18 @@ func (r *DialogRepository) GetDialogID(ctx context.Context, srcUser, dstUser mod
 	return &dialogID, nil
 }
 
+// ListMessages returns one page of a dialog's messages, newest first.
+//
+// Newest-first is what both the UI and the cache want: the cached page holds
+// the newest dialogPageSize messages, so offset 0 is the end of the history
+// that is actually hot. id is the tiebreaker — without it, messages sharing a
+// created_at would order arbitrarily and pages could repeat or skip rows.
 func (r *DialogRepository) ListMessages(ctx context.Context, dialogID *model.DialogID, limit, offset int64) ([]model.DialogMessage, error) {
 	rows, err := r.cluster.Replica().QueryContext(ctx,
 		`SELECT id, "from", "to", dialog_id, text, created_at, updated_at
 		FROM "dialog_message"
 		WHERE dialog_id = $1
-		ORDER BY created_at ASC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $2 OFFSET $3;`,
 		dialogID, limit, offset,
 	)

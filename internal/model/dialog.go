@@ -1,9 +1,38 @@
 package model
 
-import "time"
+import (
+	"fmt"
+	"slices"
+	"time"
+)
 
 type DialogID = string
 type DialogMessageID = string
+
+// DialogMessagesCacheKey is the cache key holding the newest page of a
+// dialog's messages, oldest first.
+//
+// The {dialog:<id>} hash tag puts every key belonging to one dialog in the same
+// cluster slot. That is what lets a Lua function touch several of them in one
+// call — without it, any multi-key function would be rejected with CROSSSLOT.
+func DialogMessagesCacheKey(dialogID DialogID) string {
+	return fmt.Sprintf("{dialog:%s}:msgs", dialogID)
+}
+
+// DialogIDCacheKey caches which dialog a pair of users shares. The IDs are
+// sorted so the two call orders (srcUser, dstUser) and (dstUser, srcUser)
+// resolve to the same key — there is no dialog yet to hash-tag this under.
+func DialogIDCacheKey(userA, userB UserID) string {
+	ids := []string{userA, userB}
+	slices.Sort(ids)
+	return fmt.Sprintf("dialog_id:%s:%s", ids[0], ids[1])
+}
+
+// DialogCacheKeyPrefix matches every cache key for one dialog, for bulk
+// invalidation.
+func DialogCacheKeyPrefix(dialogID DialogID) string {
+	return fmt.Sprintf("{dialog:%s}:", dialogID)
+}
 
 type DialogMessage struct {
 	ID        DialogMessageID `json:"-"`

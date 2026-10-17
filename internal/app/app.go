@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -101,10 +102,12 @@ func (s *AppServer) Run() {
 
 	s.logger.Info().Msg("Server started. Press CTRL+C to stop")
 	<-ctx.Done()
-	s.logger.Info().Msg("Got exit signal. Gracefully shutting down.")
-	if mc, ok := s.cache.(*cache.MemoryCache); ok {
-		mc.Stop()
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := s.cache.Stop(shutdownCtx); err != nil {
+		s.logger.Error().Err(err).Msg("cache shutdown")
 	}
+	s.logger.Info().Msg("Got exit signal. Gracefully shutting down.")
 	s.natsConn.Close()
 }
 
@@ -154,7 +157,25 @@ func (s *AppServer) initLogger() error {
 }
 
 func (s *AppServer) initCache() error {
-	s.cache = cache.NewMemoryCache()
+	switch s.config.Cache.Driver {
+	case "", "inmem":
+		s.cache = cache.NewInMemoryCache()
+	case "redis":
+		if len(s.config.Cache.Addrs) == 0 {
+			return fmt.Errorf("cache driver %q requires CACHE_ADDRESSES", s.config.Cache.Driver)
+		}
+		c := cache.NewRedisCache(s.config.Cache)
+		ctx, cancel := context.WithTimeout(context.Background(), s.config.Cache.DialTimeout)
+		defer cancel()
+		if err := c.Ping(ctx); err != nil {
+			return fmt.Errorf("connect redis cluster: %w", err)
+		}
+		s.logger.Info().Strs("addrs", s.config.Cache.Addrs).Msg("connected to Redis cluster")
+		s.cache = c
+	default:
+		return fmt.Errorf("unknown cache driver %q", s.config.Cache.Driver)
+	}
+
 	return nil
 }
 
@@ -195,7 +216,7 @@ func (s *AppServer) initServices() error {
 		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
 		post:    service.NewPostsService(s.repos.post, s.cache, s.logger, s.publisher),
 		friends: friendsSvc,
-		dialog:  service.NewDialogService(s.logger, s.repos.dialog),
+		dialog:  service.NewDialogService(s.logger, s.repos.dialog, s.cache),
 	}
 
 	fanout := broker.NewFeedFanout(friendsSvc, s.cache, s.hubs.feedPosted, s.logger)

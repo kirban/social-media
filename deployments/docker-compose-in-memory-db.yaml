@@ -1,0 +1,274 @@
+services:
+  sm-app:
+    container_name: sm-app
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile
+    ports:
+      - "8282:8080"
+    networks:
+      - pgnet
+      - sm-redis-net
+    env_file:
+      - .env
+    environment:
+      NATS_URL: nats://sm-nats:4222
+      CACHE_DRIVER: redis
+      CACHE_ADDRESSES: sm-redis-node-1:6379,sm-redis-node-2:6379,sm-redis-node-3:6379
+    depends_on:
+      sm-db-main:
+        condition: service_healthy
+      sm-db-sl1:
+        condition: service_healthy
+      sm-db-sl2:
+        condition: service_healthy
+      sm-nats:
+        condition: service_healthy
+      sm-redis-cluster-init:
+        condition: service_completed_successfully
+
+  sm-nats:
+    container_name: sm-nats
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    networks:
+      - pgnet
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - sm-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sm-db-main:
+    container_name: sm-db
+    image: postgres:18
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - pgnet
+    volumes:
+      - sm-data-master:/var/lib/postgresql
+      - ./deployments/init-master.sh:/docker-entrypoint-initdb.d/init-master.sh
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      REPL_USER: replicator
+      REPL_PASS: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=4
+      -c max_replication_slots=4
+      -c wal_keep_size=1024MB
+
+  sm-db-sl1:
+    container_name: sm-db-sl1
+    image: postgres:18
+    user: root
+    depends_on:
+      sm-db-main:
+        condition: service_healthy
+    ports:
+      - "5434:5432"
+    restart: unless-stopped
+    networks:
+      - pgnet
+    volumes:
+      - sm-data-sl1:/var/lib/postgresql
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # Проверяем файлы данных через системную переменную $$PGDATA
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
+          echo "=== Папка пуста. Начинаем клонирование мастера... ==="
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          # pg_basebackup сам возьмет PGUSER и PGPASSWORD из environment
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
+            sleep 3
+          done
+          echo "=== Клонирование завершено успешно! ==="
+        fi
+
+        chown -R 999:999 /var/lib/postgresql
+        exec gosu postgres postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl1'
+  sm-db-sl2:
+    container_name: sm-db-sl2
+    image: postgres:18
+    user: root
+    depends_on:
+      sm-db-main:
+        condition: service_healthy
+    ports:
+      - "5435:5432"
+    restart: unless-stopped
+    networks:
+      - pgnet
+    volumes:
+      - sm-data-sl2:/var/lib/postgresql
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
+          echo "=== Папка пуста. Начинаем клонирование мастера... ==="
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
+            sleep 3
+          done
+          echo "=== Клонирование завершено успешно! ==="
+        fi
+
+        chown -R 999:999 /var/lib/postgresql
+        exec gosu postgres postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl2'
+  # Three masters, no replicas. Each node gets its own volume so nodes.conf
+  # (its cluster identity) survives a restart.
+  sm-redis-node-1: &redis-node
+    container_name: sm-redis-node-1
+    image: redis:8.10
+    restart: unless-stopped
+    # The hostname is per-node, so it is an override rather than part of the
+    # shared redis.conf.
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis-node-1
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-1:/data
+    networks:
+      - sm-redis-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+  sm-redis-node-2:
+    <<: *redis-node
+    container_name: sm-redis-node-2
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis-node-2
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-2:/data
+  sm-redis-node-3:
+    <<: *redis-node
+    container_name: sm-redis-node-3
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis-node-3
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-3:/data
+
+  # One-shot: forms the cluster, then loads the Lua library into every master.
+  # Idempotent — safe to re-run against an already-formed cluster.
+  sm-redis-cluster-init:
+    container_name: sm-redis-cluster-init
+    image: redis:8.10
+    restart: "no"
+    volumes:
+      - ./scripts/udf:/udf:ro
+    networks:
+      - sm-redis-net
+    depends_on:
+      sm-redis-node-1:
+        condition: service_healthy
+      sm-redis-node-2:
+        condition: service_healthy
+      sm-redis-node-3:
+        condition: service_healthy
+    # The script must be a single list element: a string `command:` would be
+    # word-split by Compose and arrive as separate argv entries.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+
+        NODES="sm-redis-node-1 sm-redis-node-2 sm-redis-node-3"
+        ADDRS=""
+        for n in $$NODES; do ADDRS="$$ADDRS $$n:6379"; done
+
+        state=$$(redis-cli -h sm-redis-node-1 cluster info | tr -d '\r' \
+                 | awk -F: '/^cluster_state:/ {print $$2}')
+        if [ "$$state" = "ok" ]; then
+          echo "Кластер уже сформирован, пропускаем create."
+        else
+          echo "Инициализация Redis Cluster..."
+          redis-cli --cluster create $$ADDRS --cluster-replicas 0 --cluster-yes
+        fi
+
+        # FUNCTION LOAD is node-local and there are no replicas to propagate
+        # to, so the library must be pushed to each master individually.
+        echo "Загрузка UDF функций во все мастер-ноды кластера..."
+        for n in $$NODES; do
+          redis-cli -h "$$n" -x FUNCTION LOAD REPLACE < /udf/udf.lua
+          echo "  $$n -> $$(redis-cli -h "$$n" FUNCTION LIST | tr '\n' ' ')"
+        done
+
+        echo "Кластер успешно настроен!"
+
+networks:
+  pgnet:
+    driver: bridge
+  sm-redis-net:
+    driver: bridge
+
+volumes:
+  sm-data-master:
+  sm-data-sl1:
+  sm-data-sl2:
+  sm-nats-data:
+  sm-redis-1:
+  sm-redis-2:
+  sm-redis-3:

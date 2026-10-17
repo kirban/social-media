@@ -1,0 +1,51 @@
+# route:       dialog_send
+# concurrency: 1000
+# duration:    30s
+# command:     hey -z 30s -c 1000 -m POST -H Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNThhZDIzNDUtOTg5MC00ODYzLWEyN2UtNGM3ZWYxYjZjZjIxIiwiZXhwIjoxNzkyMzA5NzUyfQ.OHPTVRwgLpsotq549AkrFODdHn5BsB-gvwSTw1C_gEc -T application/json -d {"text":"load test message"} http://localhost:8282/api/v1/dialog/712703b2-9bf3-41be-b02c-fb7caa5199fe/send
+
+
+Summary:
+  Total:	30.1173 secs
+  Slowest:	1.3366 secs
+  Fastest:	0.0030 secs
+  Average:	0.1191 secs
+  Requests/sec:	8378.5835
+  
+  Total data:	11355300 bytes
+  Size/request:	45 bytes
+
+Response time histogram:
+  0.003 [1]	|
+  0.136 [172599]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.270 [54989]	|■■■■■■■■■■■■■
+  0.403 [16874]	|■■■■
+  0.536 [5448]	|■
+  0.670 [1657]	|
+  0.803 [534]	|
+  0.937 [164]	|
+  1.070 [54]	|
+  1.203 [16]	|
+  1.337 [4]	|
+
+
+Latency distribution:
+  10%% in 0.0171 secs
+  25%% in 0.0378 secs
+  50%% in 0.0840 secs
+  75%% in 0.1627 secs
+  90%% in 0.2674 secs
+  95%% in 0.3481 secs
+  99%% in 0.5321 secs
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.0001 secs, 0.0000 secs, 0.1062 secs
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0184 secs
+  req write:	0.0000 secs, 0.0000 secs, 0.0005 secs
+  resp wait:	0.1188 secs, 0.0030 secs, 1.3366 secs
+  resp read:	0.0000 secs, 0.0000 secs, 0.0006 secs
+
+Status code distribution:
+  [201]	252340 responses
+
+
+

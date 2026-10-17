@@ -17,6 +17,7 @@ type Config struct {
 	Server   ServerConfig `yaml:"app_server"`
 	NATS     NATSConfig   `yaml:"nats"`
 	Auth     AuthConfig   `yaml:"-"`
+	Cache    CacheConfig  `yaml:"cache_config"`
 	LogLevel string       `yaml:"log_level" env:"LOG_LEVEL" env-default:"debug"`
 }
 
@@ -65,6 +66,16 @@ type NATSConfig struct {
 
 type AuthConfig struct {
 	JWTSecret string `yaml:"-" env:"JWT_SECRET" env-required:"true"`
+}
+
+type CacheConfig struct {
+	Driver       string        `yaml:"driver" env:"CACHE_DRIVER"`
+	Addrs        []string      `yaml:"addresses" env:"CACHE_ADDRESSES"`
+	DialTimeout  time.Duration `yaml:"dial_timeout" env:"CACHE_DIAL_TIMEOUT" env-default:"5s"`
+	ReadTimeout  time.Duration `yaml:"read_timeout" env:"CACHE_READ_TIMEOUT" env-default:"3s"`
+	WriteTimeout time.Duration `yaml:"write_timeout" env:"CACHE_WRITE_TIMEOUT" env-default:"3s"`
+	Username     string        `yaml:"user" env:"CACHE_USER"`
+	Password     string        `yaml:"pass" env:"CACHE_PASS"`
 }
 
 func Load(path string) (*Config, error) {
