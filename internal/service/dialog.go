@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/kirban/social-media/internal/cache"
 	"github.com/kirban/social-media/internal/logger"
@@ -16,6 +17,12 @@ import (
 // It bounds both the memory one hot dialog can occupy and the work LTRIM does
 // on every send.
 const dialogPageSize = 500
+
+// dialogIDCacheTTL is long because the pairing a dialog_id resolves to is
+// permanent for the lifetime of the two users — nothing ever changes which
+// dialog a pair shares, so a stale entry is not a correctness concern, only
+// a bound on how long a deleted-dialog edge case could linger.
+const dialogIDCacheTTL = 24 * time.Hour
 
 type DialogServiceInterface interface {
 	GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error)
@@ -44,7 +51,7 @@ func NewDialogService(l *logger.AppLogger, r *repository.DialogRepository, c cac
 // served from the cached list, and a miss warms it for the next reader. This
 // is the path that was saturating at ~6.4k req/s (docs/task7).
 func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.UserID, limit, offset int64) ([]model.DialogMessage, error) {
-	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
+	dialogID, err := s.resolveDialogID(ctx, srcUser, dstUser)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return []model.DialogMessage{}, nil
@@ -71,6 +78,34 @@ func (s *DialogService) GetMessages(ctx context.Context, srcUser, dstUser model.
 	s.warmCachedPage(ctx, *dialogID, window)
 
 	return pageOf(window, limit, offset), nil
+}
+
+// resolveDialogID caches the dialog_id lookup for a user pair.
+//
+// The mapping is permanent once a dialog exists, so unlike the message
+// window this is a plain Get/Set — there is no write path that needs to keep
+// it warm or append to it, and a hit never needs revalidating against
+// Postgres within its TTL.
+func (s *DialogService) resolveDialogID(ctx context.Context, srcUser, dstUser model.UserID) (*model.DialogID, error) {
+	key := model.DialogIDCacheKey(srcUser, dstUser)
+
+	if cached, err := s.cache.Get(ctx, key); err == nil {
+		dialogID := model.DialogID(cached)
+		return &dialogID, nil
+	} else if !errors.Is(err, cache.ErrCacheMiss) {
+		s.log.Error().Err(err).Str("key", key).Msg("dialog: cache read failed")
+	}
+
+	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.cache.Set(ctx, key, []byte(*dialogID), dialogIDCacheTTL); err != nil {
+		s.log.Error().Err(err).Str("key", key).Msg("dialog: cache write failed")
+	}
+
+	return dialogID, nil
 }
 
 // pageFromCache answers the request from the cached window, reporting whether
@@ -176,7 +211,7 @@ func (s *DialogService) ListDialogs(ctx context.Context, srcUser model.UserID) (
 
 func (s *DialogService) SendMessage(ctx context.Context, srcUser, dstUser model.UserID, text string) (*model.DialogMessageID, error) {
 	var dialogID *model.DialogID
-	dialogID, err := s.repo.GetDialogID(ctx, srcUser, dstUser)
+	dialogID, err := s.resolveDialogID(ctx, srcUser, dstUser)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			ids := []string{srcUser, dstUser}
@@ -191,6 +226,11 @@ func (s *DialogService) SendMessage(ctx context.Context, srcUser, dstUser model.
 				return nil, err
 			}
 			dialogID = newDID
+
+			key := model.DialogIDCacheKey(srcUser, dstUser)
+			if err := s.cache.Set(ctx, key, []byte(*dialogID), dialogIDCacheTTL); err != nil {
+				s.log.Error().Err(err).Str("key", key).Msg("dialog: cache write failed")
+			}
 		} else {
 			return nil, err
 		}

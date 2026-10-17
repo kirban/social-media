@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -16,6 +17,15 @@ type DialogMessageID = string
 // call — without it, any multi-key function would be rejected with CROSSSLOT.
 func DialogMessagesCacheKey(dialogID DialogID) string {
 	return fmt.Sprintf("{dialog:%s}:msgs", dialogID)
+}
+
+// DialogIDCacheKey caches which dialog a pair of users shares. The IDs are
+// sorted so the two call orders (srcUser, dstUser) and (dstUser, srcUser)
+// resolve to the same key — there is no dialog yet to hash-tag this under.
+func DialogIDCacheKey(userA, userB UserID) string {
+	ids := []string{userA, userB}
+	slices.Sort(ids)
+	return fmt.Sprintf("dialog_id:%s:%s", ids[0], ids[1])
 }
 
 // DialogCacheKeyPrefix matches every cache key for one dialog, for bulk
