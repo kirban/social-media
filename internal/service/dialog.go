@@ -36,6 +36,8 @@ type DialogService struct {
 	cache cache.Cache
 }
 
+var _ DialogServiceInterface = (*DialogService)(nil)
+
 func NewDialogService(l *logger.AppLogger, r *repository.DialogRepository, c cache.Cache) *DialogService {
 	return &DialogService{
 		log:   l,

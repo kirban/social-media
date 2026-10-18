@@ -21,10 +21,10 @@ import (
 type Handlers struct {
 	Unimplemented
 	Logger     *logger.AppLogger
-	UserSvc    *service.UserService
+	UserSvc    service.UserServiceInterface
 	PostSvc    *service.PostsService
 	FriendsSvc *service.FriendsService
-	DialogSvc  *service.DialogService
+	DialogSvc  service.DialogServiceInterface
 }
 
 var _ ServerInterface = (*Handlers)(nil)

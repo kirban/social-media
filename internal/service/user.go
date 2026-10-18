@@ -16,10 +16,19 @@ var (
 	ErrUnauthorized = errors.New("unauthorized")
 )
 
+type UserServiceInterface interface {
+	Register(ctx context.Context, firstName, secondName, password string, birthdate *string, biography, city string) (string, error)
+	Login(ctx context.Context, id, password string) (string, error)
+	GetByID(ctx context.Context, id string) (*model.User, error)
+	SearchByNames(ctx context.Context, fname, lname string) (*[]model.User, error)
+}
+
 type UserService struct {
 	repo      *repository.UserRepository
 	jwtSecret string
 }
+
+var _ UserServiceInterface = (*UserService)(nil)
 
 func NewUserService(repo *repository.UserRepository, jwtSecret string) *UserService {
 	return &UserService{repo: repo, jwtSecret: jwtSecret}

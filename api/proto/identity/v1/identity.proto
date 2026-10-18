@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package identity.v1;
+
+option go_package = "github.com/kirban/social-media/api/proto/gen/identity/v1;identityv1";
+
+// IdentityService is the gRPC contract for the extracted User/Auth domain.
+// Each RPC mirrors one REST route from docs/openapi.json 1:1 so the gateway's
+// gRPC-client adapter (internal/service/user_grpc_client.go) can translate
+// without changing either contract's shape.
+service IdentityService {
+  // Register mirrors POST /user/register.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  // Login mirrors POST /login.
+  rpc Login(LoginRequest) returns (LoginResponse);
+  // GetUser mirrors GET /user/get/{id}.
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  // SearchUsers mirrors GET /user/search.
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+}
+
+message User {
+  string id = 1;
+  string first_name = 2;
+  string second_name = 3;
+  optional string birthdate = 4;
+  string biography = 5;
+  string city = 6;
+}
+
+message RegisterRequest {
+  string first_name = 1;
+  string second_name = 2;
+  string password = 3;
+  optional string birthdate = 4;
+  string biography = 5;
+  string city = 6;
+}
+
+message RegisterResponse {
+  string id = 1;
+}
+
+message LoginRequest {
+  string id = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string token = 1;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message SearchUsersRequest {
+  string first_name = 1;
+  string second_name = 2;
+}
+
+message SearchUsersResponse {
+  repeated User users = 1;
+}
