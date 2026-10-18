@@ -13,12 +13,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /app/identity-service ./cmd/identity-se
 
 FROM alpine:3.20
 
+ARG CFG_PATH=configs/identity-service-config-docker.yaml
+ENV CFG_PATH=${CFG_PATH}
+
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
 COPY --from=builder /app/identity-service .
-COPY configs/identity-service-config-docker.yaml ./configs/app-config.yaml
+COPY ${CFG_PATH} ./configs/app-config.yaml
 
 EXPOSE 50062
 
