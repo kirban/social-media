@@ -12,13 +12,34 @@ import (
 const DefaultConfigPath = "configs/app-config.yaml"
 
 type Config struct {
-	Env      string       `yaml:"env" env:"ENV" env-required:"true"`
-	Database DBConfig     `yaml:"app_db"`
-	Server   ServerConfig `yaml:"app_server"`
-	NATS     NATSConfig   `yaml:"nats"`
-	Auth     AuthConfig   `yaml:"-"`
-	Cache    CacheConfig  `yaml:"cache_config"`
-	LogLevel string       `yaml:"log_level" env:"LOG_LEVEL" env-default:"debug"`
+	Env      string         `yaml:"env" env:"ENV" env-required:"true"`
+	Database DBConfig       `yaml:"app_db"`
+	Server   ServerConfig   `yaml:"app_server"`
+	NATS     NATSConfig     `yaml:"nats"`
+	Auth     AuthConfig     `yaml:"-"`
+	Cache    CacheConfig    `yaml:"cache_config"`
+	Services ServicesConfig `yaml:"services"`
+	LogLevel string         `yaml:"log_level" env:"LOG_LEVEL" env-default:"debug"`
+}
+
+// ServiceMode selects whether the gateway calls a domain's logic in-process
+// or over gRPC against an extracted service — the Strangler Fig switch.
+const (
+	ServiceModeInProcess = "inprocess"
+	ServiceModeGRPC      = "grpc"
+)
+
+// ServicesConfig controls, per extracted domain, whether the gateway runs
+// that domain's logic in-process (the historical default) or forwards to a
+// standalone gRPC service (cmd/dialog-service, cmd/identity-service). This
+// is the only thing that changes when a domain is strangled out of the
+// monolith — internal/api's handlers and docs/openapi.json are untouched
+// either way.
+type ServicesConfig struct {
+	DialogMode string `yaml:"dialog_mode" env:"DIALOG_SERVICE_MODE" env-default:"inprocess"`
+	DialogAddr string `yaml:"dialog_addr" env:"DIALOG_SERVICE_ADDR"`
+	UserMode   string `yaml:"user_mode" env:"USER_SERVICE_MODE" env-default:"inprocess"`
+	UserAddr   string `yaml:"user_addr" env:"USER_SERVICE_ADDR"`
 }
 
 type DBConfig struct {

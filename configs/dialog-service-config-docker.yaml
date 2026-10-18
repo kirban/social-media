@@ -1,0 +1,12 @@
+env: local
+log_level: debug
+app_db:
+  host: sm-db
+  port: 5432
+  database: social_media_db
+  ssl_mode: disable
+# app_server is unused by this process (it serves gRPC only, no HTTP), but
+# ServerConfig.Port has no env-default fallback for a required field left
+# unset by both YAML and env — see internal/config/config.go.
+app_server:
+  port: "8080"

@@ -1,0 +1,193 @@
+# Microservices split (first phase): Dialog and Identity are extracted from
+# the monolith into standalone gRPC services (cmd/dialog-service,
+# cmd/identity-service); the gateway (cmd/server) keeps Friends/Post
+# in-process and forwards Dialog/Identity routes over gRPC — see
+# internal/config.ServicesConfig and internal/app.AppServer.initServices.
+#
+# Redis runs single-node, in cluster mode with all 16384 slots self-assigned
+# to that one node (sm-redis-init), because internal/cache/redis.go's
+# RedisCache only speaks the cluster protocol and a real multi-node cluster
+# is not required for this task (see docker-compose-in-memory-db.yaml for
+# that 3-node variant). Postgres is a single shared instance for now — each
+# service only ever touches its own tables (dialog-service: dialog,
+# dialog_user, dialog_message; identity-service: users), enforced by code
+# review rather than DB grants, as a transitional step before any real
+# database-per-service split.
+#
+# Run from the project root (one file, one command):
+#   docker compose -f deployments/docker-compose-microservices.yaml --env-file .env up --build
+
+services:
+  sm-gateway:
+    container_name: sm-gateway
+    build:
+      context: ..
+      dockerfile: deployments/gateway/Dockerfile
+    ports:
+      - "8282:8080"
+    networks:
+      - sm-net
+    env_file:
+      - ../.env
+    environment:
+      NATS_URL: nats://sm-nats:4222
+      CACHE_DRIVER: redis
+      CACHE_ADDRESSES: sm-redis:6379
+      DIALOG_SERVICE_MODE: grpc
+      DIALOG_SERVICE_ADDR: sm-dialog-service:50061
+      USER_SERVICE_MODE: grpc
+      USER_SERVICE_ADDR: sm-identity-service:50062
+    depends_on:
+      sm-db:
+        condition: service_healthy
+      sm-nats:
+        condition: service_healthy
+      sm-dialog-service:
+        condition: service_healthy
+      sm-identity-service:
+        condition: service_healthy
+
+  sm-dialog-service:
+    container_name: sm-dialog-service
+    build:
+      context: ..
+      dockerfile: deployments/dialog-service/Dockerfile
+    networks:
+      - sm-net
+    env_file:
+      - ../.env
+    environment:
+      CACHE_DRIVER: redis
+      CACHE_ADDRESSES: sm-redis:6379
+    depends_on:
+      sm-db:
+        condition: service_healthy
+      sm-redis-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app/dialog-service", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  sm-identity-service:
+    container_name: sm-identity-service
+    build:
+      context: ..
+      dockerfile: deployments/identity-service/Dockerfile
+    networks:
+      - sm-net
+    env_file:
+      - ../.env
+    depends_on:
+      sm-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/identity-service", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  sm-nats:
+    container_name: sm-nats
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    networks:
+      - sm-net
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - sm-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sm-db:
+    container_name: sm-db
+    image: postgres:18
+    ports:
+      - "5432:5432"
+    networks:
+      - sm-net
+    volumes:
+      - sm-data:/var/lib/postgresql
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sm-redis:
+    container_name: sm-redis
+    image: redis:8.10
+    restart: unless-stopped
+    # The hostname matters: nodes.conf (the cluster identity) and the
+    # slot-assignment step below both reference it, and it must survive
+    # restarts from the per-node volume rather than a reassigned IP.
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis
+    volumes:
+      - ../redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-data:/data
+    networks:
+      - sm-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # One-shot: a cluster-mode Redis with a single node has no slots assigned
+  # and refuses every key command until some node claims all of them. Real
+  # multi-node clusters do this via `redis-cli --cluster create`, but that
+  # command refuses fewer than 3 master nodes, so a single node claims its
+  # slots directly with CLUSTER ADDSLOTSRANGE instead. Idempotent — safe to
+  # re-run against an already-initialized node.
+  sm-redis-init:
+    container_name: sm-redis-init
+    image: redis:8.10
+    restart: "no"
+    volumes:
+      - ../scripts/udf:/udf:ro
+    networks:
+      - sm-net
+    depends_on:
+      sm-redis:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+
+        state=$$(redis-cli -h sm-redis cluster info | tr -d '\r' \
+                 | awk -F: '/^cluster_state:/ {print $$2}')
+        if [ "$$state" = "ok" ]; then
+          echo "Slots already assigned, skipping."
+        else
+          echo "Assigning all 16384 slots to the single node..."
+          redis-cli -h sm-redis CLUSTER ADDSLOTSRANGE 0 16383
+        fi
+
+        echo "Loading UDF functions..."
+        redis-cli -h sm-redis -x FUNCTION LOAD REPLACE < /udf/udf.lua
+        echo "Redis single-node cluster ready."
+
+networks:
+  sm-net:
+    driver: bridge
+
+volumes:
+  sm-data:
+  sm-nats-data:
+  sm-redis-data:

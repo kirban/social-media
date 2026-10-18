@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package dialog.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/kirban/social-media/api/proto/gen/dialog/v1;dialogv1";
+
+// DialogService is the gRPC contract for the extracted Dialog domain. Each
+// RPC mirrors one REST route from docs/openapi.json 1:1 so the gateway's
+// gRPC-client adapter (internal/service/dialog_grpc_client.go) can translate
+// without changing either contract's shape.
+service DialogService {
+  // ListDialogs mirrors GET /dialog/list.
+  rpc ListDialogs(ListDialogsRequest) returns (ListDialogsResponse);
+  // GetMessages mirrors GET /dialog/{user_id}/list.
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+  // SendMessage mirrors POST /dialog/{user_id}/send.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+}
+
+message DialogSummary {
+  string dialog_id = 1;
+  string user_id = 2;
+}
+
+message DialogMessage {
+  string from = 1;
+  string to = 2;
+  string dialog_id = 3;
+  string text = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message ListDialogsRequest {
+  string src_user = 1;
+}
+
+message ListDialogsResponse {
+  repeated DialogSummary dialogs = 1;
+}
+
+message GetMessagesRequest {
+  string src_user = 1;
+  string dst_user = 2;
+  int64 limit = 3;
+  int64 offset = 4;
+}
+
+message GetMessagesResponse {
+  repeated DialogMessage messages = 1;
+}
+
+message SendMessageRequest {
+  string src_user = 1;
+  string dst_user = 2;
+  string text = 3;
+}
+
+message SendMessageResponse {
+  string message_id = 1;
+}

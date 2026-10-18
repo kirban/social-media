@@ -15,7 +15,11 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	dialogv1 "github.com/kirban/social-media/api/proto/gen/dialog/v1"
+	identityv1 "github.com/kirban/social-media/api/proto/gen/identity/v1"
 	"github.com/kirban/social-media/internal/api"
 	"github.com/kirban/social-media/internal/broker"
 	"github.com/kirban/social-media/internal/cache"
@@ -23,8 +27,11 @@ import (
 	"github.com/kirban/social-media/internal/db"
 	applogger "github.com/kirban/social-media/internal/logger"
 	appmiddleware "github.com/kirban/social-media/internal/middleware"
+	middleware_grpc "github.com/kirban/social-media/internal/middleware/grpc"
 	"github.com/kirban/social-media/internal/repository"
 	"github.com/kirban/social-media/internal/service"
+	dialog_grpc "github.com/kirban/social-media/internal/transport/grpc/dialog"
+	identity_grpc "github.com/kirban/social-media/internal/transport/grpc/identity"
 	"github.com/kirban/social-media/internal/transport/websocket"
 )
 
@@ -36,10 +43,10 @@ type repositories struct {
 }
 
 type services struct {
-	user    *service.UserService
+	user    service.UserServiceInterface
 	post    *service.PostsService
 	friends *service.FriendsService
-	dialog  *service.DialogService
+	dialog  service.DialogServiceInterface
 }
 
 // hubs holds one WebSocket hub per async channel. Each channel is an
@@ -62,6 +69,10 @@ type AppServer struct {
 	stream       jetstream.Stream
 	publisher    *broker.Publisher
 	feedConsumer *broker.Consumer
+	// grpcConns holds client connections dialed for any domain running in
+	// ServiceModeGRPC, so Run can close them on shutdown alongside the DB
+	// and NATS connections.
+	grpcConns []*grpc.ClientConn
 }
 
 func NewAppServer() (*AppServer, error) {
@@ -109,6 +120,11 @@ func (s *AppServer) Run() {
 	}
 	s.logger.Info().Msg("Got exit signal. Gracefully shutting down.")
 	s.natsConn.Close()
+	for _, conn := range s.grpcConns {
+		if err := conn.Close(); err != nil {
+			s.logger.Error().Err(err).Msg("closing grpc client connection")
+		}
+	}
 }
 
 func (s *AppServer) initDeps() error {
@@ -212,16 +228,72 @@ func (s *AppServer) initBroker() error {
 
 func (s *AppServer) initServices() error {
 	friendsSvc := service.NewFriendsService(s.repos.friends, s.cache, s.logger)
+
+	userSvc, err := s.buildUserService()
+	if err != nil {
+		return err
+	}
+
+	dialogSvc, err := s.buildDialogService()
+	if err != nil {
+		return err
+	}
+
 	s.svcs = &services{
-		user:    service.NewUserService(s.repos.user, s.config.Auth.JWTSecret),
+		user:    userSvc,
 		post:    service.NewPostsService(s.repos.post, s.cache, s.logger, s.publisher),
 		friends: friendsSvc,
-		dialog:  service.NewDialogService(s.logger, s.repos.dialog, s.cache),
+		dialog:  dialogSvc,
 	}
 
 	fanout := broker.NewFeedFanout(friendsSvc, s.cache, s.hubs.feedPosted, s.logger)
 	s.feedConsumer = broker.NewConsumer(s.stream, s.config.NATS, fanout, s.logger)
 	return nil
+}
+
+// buildUserService returns the in-process UserService, or a gRPC-backed
+// adapter dialing identity-service, based on config.Services.UserMode — the
+// Strangler Fig switch for this domain.
+func (s *AppServer) buildUserService() (service.UserServiceInterface, error) {
+	if s.config.Services.UserMode != config.ServiceModeGRPC {
+		return service.NewUserService(s.repos.user, s.config.Auth.JWTSecret), nil
+	}
+
+	conn, err := s.dialService(s.config.Services.UserAddr)
+	if err != nil {
+		return nil, fmt.Errorf("dial identity-service: %w", err)
+	}
+	return identity_grpc.NewUserGRPCClient(identityv1.NewIdentityServiceClient(conn)), nil
+}
+
+// buildDialogService returns the in-process DialogService, or a gRPC-backed
+// adapter dialing dialog-service, based on config.Services.DialogMode — the
+// Strangler Fig switch for this domain.
+func (s *AppServer) buildDialogService() (service.DialogServiceInterface, error) {
+	if s.config.Services.DialogMode != config.ServiceModeGRPC {
+		return service.NewDialogService(s.logger, s.repos.dialog, s.cache), nil
+	}
+
+	conn, err := s.dialService(s.config.Services.DialogAddr)
+	if err != nil {
+		return nil, fmt.Errorf("dial dialog-service: %w", err)
+	}
+	return dialog_grpc.NewDialogGRPCClient(dialogv1.NewDialogServiceClient(conn)), nil
+}
+
+// dialService opens a gRPC connection with the request-id-propagating
+// client interceptor attached, and tracks it for Run to close on shutdown.
+func (s *AppServer) dialService(addr string) (*grpc.ClientConn, error) {
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(middleware_grpc.UnaryClientInterceptor),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.grpcConns = append(s.grpcConns, conn)
+	return conn, nil
 }
 
 func (s *AppServer) initHTTPServer() error {
