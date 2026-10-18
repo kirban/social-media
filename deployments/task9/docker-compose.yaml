@@ -1,0 +1,315 @@
+# Run from the project root (one file, one command):
+#   docker compose -f deployments/docker-compose-microservices.yaml --env-file .env up --build
+
+services:
+  sm-gateway:
+    container_name: sm-gateway
+    build:
+      args:
+        - CFG_PATH=deployments/task9/app-config/gateway-config-docker.yaml
+      context: ../..
+      dockerfile: deployments/gateway/Dockerfile
+    ports:
+      - "8282:8080"
+    networks:
+      - sm-net
+    env_file:
+      - ../../.env
+    environment:
+      NATS_URL: nats://sm-nats:4222
+      CACHE_DRIVER: redis
+      CACHE_ADDRESSES: sm-redis:6379
+      DIALOG_SERVICE_MODE: grpc
+      DIALOG_SERVICE_ADDR: sm-dialog-service:50061
+      USER_SERVICE_MODE: grpc
+      USER_SERVICE_ADDR: sm-identity-service:50062
+    depends_on:
+      sm-db:
+        condition: service_healthy
+      sm-haproxy:
+        condition: service_started
+      sm-nats:
+        condition: service_healthy
+      sm-dialog-service:
+        condition: service_healthy
+      sm-identity-service:
+        condition: service_healthy
+
+  sm-dialog-service:
+    container_name: sm-dialog-service
+    build:
+      args:
+        - CFG_PATH=deployments/task9/app-config/dialog-service-config-docker.yaml
+      context: ../..
+      dockerfile: deployments/dialog-service/Dockerfile
+    networks:
+      - sm-net
+    env_file:
+      - ../../.env
+    environment:
+      CACHE_DRIVER: redis
+      CACHE_ADDRESSES: sm-redis:6379
+    depends_on:
+      sm-db:
+        condition: service_healthy
+      sm-redis-init:
+        condition: service_completed_successfully
+      sm-haproxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/app/dialog-service", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  sm-identity-service:
+    container_name: sm-identity-service
+    build:
+      args:
+        - CFG_PATH=deployments/task9/app-config/identity-service-config-docker.yaml
+      context: ../..
+      dockerfile: deployments/identity-service/Dockerfile
+    networks:
+      - sm-net
+    env_file:
+      - ../../.env
+    depends_on:
+      sm-db:
+        condition: service_healthy
+      sm-haproxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/app/identity-service", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  sm-nats:
+    container_name: sm-nats
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    networks:
+      - sm-net
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - sm-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sm-haproxy:
+    image: haproxy:2.8-alpine
+    # container_name: sm-haproxy
+    depends_on:
+      - sm-db-sl1
+      - sm-db-sl2
+    volumes:
+      - ../../deployments/task9/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5001:5001" # Port where your Go App routes Read queries
+    networks:
+      - sm-net
+  sm-db:
+    container_name: sm-db
+    image: postgres:18
+    ports:
+      - "5432:5432"
+    networks:
+      - sm-net
+    volumes:
+      - sm-data:/var/lib/postgresql
+      - ../../deployments/init-master.sh:/docker-entrypoint-initdb.d/init-master.sh
+    env_file:
+      - ../../.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      REPL_USER: replicator
+      REPL_PASS: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=4
+      -c max_replication_slots=4
+      -c wal_keep_size=1024MB
+  sm-db-sl1:
+    container_name: sm-db-sl1
+    image: postgres:18
+    user: root
+    depends_on:
+      sm-db:
+        condition: service_healthy
+    ports:
+      - "5438:5432"
+    restart: unless-stopped
+    networks:
+      - sm-net
+    volumes:
+      - sm-data-sl1-data:/var/lib/postgresql
+    env_file:
+      - ../../.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # Проверяем файлы данных через системную переменную $$PGDATA
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
+          echo "=== Папка пуста. Начинаем клонирование мастера... ==="
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          # pg_basebackup сам возьмет PGUSER и PGPASSWORD из environment
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
+            sleep 3
+          done
+          echo "=== Клонирование завершено успешно! ==="
+        fi
+
+        chown -R 999:999 /var/lib/postgresql
+        exec gosu postgres postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl1'
+
+  sm-db-sl2:
+    container_name: sm-db-sl2
+    image: postgres:18
+    user: root
+    depends_on:
+      sm-db:
+        condition: service_healthy
+    ports:
+      - "5439:5432"
+    restart: unless-stopped
+    networks:
+      - sm-net
+    volumes:
+      - sm-data-sl2-data:/var/lib/postgresql
+    env_file:
+      - ../../.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/18/docker
+      PGUSER: replicator
+      PGPASSWORD: pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # Проверяем файлы данных через системную переменную $$PGDATA
+        if [ ! -s "$${PGDATA}/PG_VERSION" ]; then
+          echo "=== Папка пуста. Начинаем клонирование мастера... ==="
+          mkdir -p "$${PGDATA}"
+          chown -R 999:999 /var/lib/postgresql
+          chmod 700 "$${PGDATA}"
+
+          # pg_basebackup сам возьмет PGUSER и PGPASSWORD из environment
+          until pg_basebackup -h sm-db -p 5432 -D "$${PGDATA}" -F p -P -R -X stream; do
+            echo "=== Ошибка pg_basebackup. Очистка и повтор через 3 секунды... ==="
+            rm -rf "$${PGDATA:?}/"*
+            sleep 3
+          done
+          echo "=== Клонирование завершено успешно! ==="
+        fi
+
+        chown -R 999:999 /var/lib/postgresql
+        exec gosu postgres postgres \
+         -c primary_conninfo='host=sm-db port=5432 application_name=sm-db-sl2'
+  sm-redis:
+    container_name: sm-redis
+    image: redis:8.10
+    restart: unless-stopped
+    # The hostname matters: nodes.conf (the cluster identity) and the
+    # slot-assignment step below both reference it, and it must survive
+    # restarts from the per-node volume rather than a reassigned IP.
+    command: redis-server /usr/local/etc/redis/redis.conf --cluster-announce-hostname sm-redis
+    volumes:
+      - ../../redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - sm-redis-data:/data
+    networks:
+      - sm-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # One-shot: a cluster-mode Redis with a single node has no slots assigned
+  # and refuses every key command until some node claims all of them. Real
+  # multi-node clusters do this via `redis-cli --cluster create`, but that
+  # command refuses fewer than 3 master nodes, so a single node claims its
+  # slots directly with CLUSTER ADDSLOTSRANGE instead. Idempotent — safe to
+  # re-run against an already-initialized node.
+  sm-redis-init:
+    container_name: sm-redis-init
+    image: redis:8.10
+    restart: "no"
+    volumes:
+      - ../../scripts/udf:/udf:ro
+    networks:
+      - sm-net
+    depends_on:
+      sm-redis:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+
+        state=$$(redis-cli -h sm-redis cluster info | tr -d '\r' \
+                 | awk -F: '/^cluster_state:/ {print $$2}')
+        if [ "$$state" = "ok" ]; then
+          echo "Slots already assigned, skipping."
+        else
+          echo "Assigning all 16384 slots to the single node..."
+          redis-cli -h sm-redis CLUSTER ADDSLOTSRANGE 0 16383
+        fi
+
+        echo "Loading UDF functions..."
+        redis-cli -h sm-redis -x FUNCTION LOAD REPLACE < /udf/udf.lua
+        echo "Redis single-node cluster ready."
+
+networks:
+  sm-net:
+    driver: bridge
+
+volumes:
+  sm-data:
+  sm-data-sl1-data:
+  sm-data-sl2-data:
+  sm-nats-data:
+  sm-redis-data:
