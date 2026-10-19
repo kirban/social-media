@@ -2,15 +2,26 @@
 #   docker compose -f deployments/docker-compose-microservices.yaml --env-file .env up --build
 
 services:
+  sm-nginx:
+    container_name: sm-nginx
+    image: nginx:alpine
+    ports:
+      - "8282:80"
+    volumes:
+      - ../../deployments/task9/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - sm-net
+    depends_on:
+      - sm-gateway
+
   sm-gateway:
-    container_name: sm-gateway
     build:
       args:
         - CFG_PATH=deployments/task9/app-config/gateway-config-docker.yaml
       context: ../..
       dockerfile: deployments/gateway/Dockerfile
-    ports:
-      - "8282:8080"
+    expose:
+      - "8080"
     networks:
       - sm-net
     env_file:
