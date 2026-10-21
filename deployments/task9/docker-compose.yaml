@@ -31,11 +31,11 @@ services:
       CACHE_DRIVER: redis
       CACHE_ADDRESSES: sm-redis:6379
       DIALOG_SERVICE_MODE: grpc
-      DIALOG_SERVICE_ADDR: sm-dialog-service:50061
-      # DIALOG_SERVICE_ADDR: dns:///sm-dialog-service:50061
+      # DIALOG_SERVICE_ADDR: sm-dialog-service:50061
+      DIALOG_SERVICE_ADDR: dns:///sm-dialog-service:50061
       USER_SERVICE_MODE: grpc
-      USER_SERVICE_ADDR: sm-identity-service:50062
-      # USER_SERVICE_ADDR: dns:///sm-identity-service:50062
+      # USER_SERVICE_ADDR: sm-identity-service:50062
+      USER_SERVICE_ADDR: dns:///sm-identity-service:50062
     depends_on:
       sm-db:
         condition: service_healthy
@@ -330,7 +330,13 @@ networks:
 
 volumes:
   sm-data:
+    external: true
+    name: social-media_sm-data-master
   sm-data-sl1-data:
+    external: true
+    name: social-media_sm-data-sl1
   sm-data-sl2-data:
+    external: true
+    name: social-media_sm-data-sl2
   sm-nats-data:
   sm-redis-data:
