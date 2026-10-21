@@ -32,8 +32,10 @@ services:
       CACHE_ADDRESSES: sm-redis:6379
       DIALOG_SERVICE_MODE: grpc
       DIALOG_SERVICE_ADDR: sm-dialog-service:50061
+      # DIALOG_SERVICE_ADDR: dns:///sm-dialog-service:50061
       USER_SERVICE_MODE: grpc
       USER_SERVICE_ADDR: sm-identity-service:50062
+      # USER_SERVICE_ADDR: dns:///sm-identity-service:50062
     depends_on:
       sm-db:
         condition: service_healthy
@@ -47,7 +49,6 @@ services:
         condition: service_healthy
 
   sm-dialog-service:
-    container_name: sm-dialog-service
     build:
       args:
         - CFG_PATH=deployments/task9/app-config/dialog-service-config-docker.yaml
@@ -65,8 +66,13 @@ services:
         condition: service_healthy
       sm-redis-init:
         condition: service_completed_successfully
+      sm-db-sl1:
+        condition: service_healthy
+      sm-db-sl2:
+        condition: service_healthy
       sm-haproxy:
         condition: service_started
+    scale: 2
     healthcheck:
       test: ["CMD", "/app/dialog-service", "healthcheck"]
       interval: 5s
@@ -75,7 +81,6 @@ services:
       start_period: 5s
 
   sm-identity-service:
-    container_name: sm-identity-service
     build:
       args:
         - CFG_PATH=deployments/task9/app-config/identity-service-config-docker.yaml
@@ -88,8 +93,13 @@ services:
     depends_on:
       sm-db:
         condition: service_healthy
+      sm-db-sl1:
+        condition: service_healthy
+      sm-db-sl2:
+        condition: service_healthy
       sm-haproxy:
         condition: service_started
+    scale: 2
     healthcheck:
       test: ["CMD", "/app/identity-service", "healthcheck"]
       interval: 5s

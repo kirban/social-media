@@ -12,3 +12,5 @@ EOSQL
 
 # 2. Append replication permissions to pg_hba.conf dynamically
 echo "host replication $REPL_USER $SUBNET md5" >> "$PGDATA/pg_hba.conf"
+
+pg_ctl reload
