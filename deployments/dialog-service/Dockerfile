@@ -13,12 +13,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /app/dialog-service ./cmd/dialog-servic
 
 FROM alpine:3.20
 
+ARG CFG_PATH=configs/dialog-service-config-docker.yaml
+ENV CFG_PATH=${CFG_PATH}
+
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
 COPY --from=builder /app/dialog-service .
-COPY configs/dialog-service-config-docker.yaml ./configs/app-config.yaml
+COPY ${CFG_PATH} ./configs/app-config.yaml
 
 EXPOSE 50061
 
