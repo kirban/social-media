@@ -1,0 +1,51 @@
+# route:       dialog_list
+# concurrency: 1
+# duration:    30s
+# command:     hey -z 30s -c 1 -H Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMjYyOTNlYjgtNmQwNS00ZTAxLTkzNDEtNmQ2ZTI5ZjAzMTAzIiwiZXhwIjoxNzkyNjc1MDYyfQ.FiGFE8uxe2pgpx6vAcGhwwIjPPCUrwrdlrF9RXUIal0 http://localhost:8282/api/v1/dialog/list
+
+
+Summary:
+  Total:	30.0001 secs
+  Slowest:	0.0109 secs
+  Fastest:	0.0007 secs
+  Average:	0.0010 secs
+  Requests/sec:	1041.5283
+  
+  Total data:	62492 bytes
+  Size/request:	2 bytes
+
+Response time histogram:
+  0.001 [1]	|
+  0.002 [30935]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.003 [267]	|
+  0.004 [30]	|
+  0.005 [6]	|
+  0.006 [3]	|
+  0.007 [2]	|
+  0.008 [0]	|
+  0.009 [1]	|
+  0.010 [0]	|
+  0.011 [1]	|
+
+
+Latency distribution:
+  10%% in 0.0008 secs
+  25%% in 0.0009 secs
+  50%% in 0.0009 secs
+  75%% in 0.0010 secs
+  90%% in 0.0011 secs
+  95%% in 0.0012 secs
+  99%% in 0.0017 secs
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0038 secs
+  DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0021 secs
+  req write:	0.0000 secs, 0.0000 secs, 0.0040 secs
+  resp wait:	0.0009 secs, 0.0007 secs, 0.0109 secs
+  resp read:	0.0000 secs, 0.0000 secs, 0.0006 secs
+
+Status code distribution:
+  [200]	31246 responses
+
+
+

@@ -284,8 +284,11 @@ func (s *AppServer) buildDialogService() (service.DialogServiceInterface, error)
 // dialService opens a gRPC connection with the request-id-propagating
 // client interceptor attached, and tracks it for Run to close on shutdown.
 func (s *AppServer) dialService(addr string) (*grpc.ClientConn, error) {
+	serviceConfig := `{"loadBalancingConfig": [{"round_robin":{}}]}`
+
 	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(serviceConfig),
 		grpc.WithChainUnaryInterceptor(middleware_grpc.UnaryClientInterceptor),
 	)
 	if err != nil {
